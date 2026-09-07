@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CrispyGo Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background: #f97316; font-family: Inter, system-ui, sans-serif; color: #3d2412;
+      padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { color: #fff; margin-bottom: 6px; font-size: clamp(22px, 6vw, 28px); }
+    .top { color: #ffe8d0; margin-bottom: 18px; }
+    .top a { color: #fff; }
+    .card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+    h2 { font-size: 16px; margin-bottom: 10px; }
+    .bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(60px, 2fr) 28px; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+    .bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track { height: 10px; background: #f3e8dc; border-radius: 99px; overflow: hidden; }
+    .fill { height: 100%; background: #f97316; }
+    .row { border-top: 1px solid #f0e6dc; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+    .id { color: #8a6a4a; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CrispyGo Admin</h1>
+    <p class="top"><span id="count"></span> · <a href="index.html">Back to survey</a></p>
+    <div id="app"></div>
+  </div>
+  <script>
+    const list = JSON.parse(localStorage.getItem('surveys') || '[]');
+    document.getElementById('count').textContent = list.length + ' responses';
+    if (!list.length) {
+      document.getElementById('app').innerHTML = '<div class="card">No responses yet.</div>';
+    } else {
+      const qMap = {};
+      list.forEach(s => s.answers.forEach(a => {
+        if (!qMap[a.id]) qMap[a.id] = { text: a.text, counts: {}, comments: [] };
+        if (typeof a.value === 'string') { if (a.value) qMap[a.id].comments.push(a.value); }
+        else a.value.forEach(v => qMap[a.id].counts[v] = (qMap[a.id].counts[v] || 0) + 1);
+      }));
+      let html = '';
+      Object.values(qMap).forEach(q => {
+        html += `<div class="card"><h2>${q.text}</h2>`;
+        const keys = Object.keys(q.counts);
+        const max = Math.max(1, ...Object.values(q.counts));
+        keys.forEach(k => {
+          html += `<div class="bar"><span>${k}</span><div class="track"><div class="fill" style="width:${q.counts[k]/max*100}%"></div></div><b>${q.counts[k]}</b></div>`;
+        });
+        q.comments.forEach(c => { html += `<div class="row">${c}</div>`; });
+        html += '</div>';
+      });
+      html += '<div class="card"><h2>All submissions</h2>';
+      list.forEach(s => {
+        html += `<div class="row"><b>${new Date(s.at).toLocaleString()}</b><div class="id">${s.id}</div>`;
+        s.answers.forEach(a => {
+          const v = Array.isArray(a.value) ? a.value.join(', ') : a.value;
+          if (v) html += `${a.text}: ${v}<br>`;
+        });
+        html += '</div>';
+      });
+      document.getElementById('app').innerHTML = html + '</div>';
+    }
+  </script>
+</body>
+</html>

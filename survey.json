@@ -1,0 +1,48 @@
+{
+  "name": "CrispyGo",
+  "welcomeSub": "Thank you for visiting CrispyGo!",
+  "welcomeTitle": "Your feedback is valuable to us! Please fill in this 30 second survey :)",
+  "thanks": "Thank you for completing our survey!",
+  "questions": [
+    {
+      "id": "q1",
+      "label": "Rate 1 - 5",
+      "text": "How was your experience today?",
+      "type": "choice",
+      "isMultiple": false,
+      "options": ["Excellent", "Good", "Neutral", "Bad", "Terrible"]
+    },
+    {
+      "id": "q2",
+      "label": "Feedback",
+      "text": "What did you like?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Ambiance", "Guest Service", "Food Quality"]
+    },
+    {
+      "id": "q3",
+      "label": "Feedback",
+      "text": "What did you like about the guest service?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Speed of Service", "Friendliness", "Approachable", "Knowledge", "Grooming & Hygiene"]
+    },
+    {
+      "id": "q4",
+      "label": "Feedback",
+      "text": "Any other comments?",
+      "type": "text",
+      "isMultiple": false,
+      "placeholder": "Type here..."
+    },
+    {
+      "id": "q5",
+      "label": "We're glad you had a great experience!",
+      "text": "Please share your contact details for a chance to win a special prize!",
+      "type": "contact",
+      "isMultiple": false,
+      "optional": true
+    }
+  ]
+}
