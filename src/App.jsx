@@ -6,8 +6,17 @@ const codes = ['+92', '+1', '+44', '+971'];
 function blank() {
   return Object.fromEntries(S.questions.map(q => [
     q.id,
-    q.type === 'text' ? '' : q.type === 'contact' ? { order: '', code: '+92', phone: '' } : []
+    q.type === 'choice' ? [] : q.type === 'contact' ? { order: '', code: '+92', phone: '' } : ''
   ]));
+}
+
+function visible(answers) {
+  return S.questions.filter(q => {
+    if (!q.showIf) return true;
+    const got = answers[q.showIf.id];
+    const arr = Array.isArray(got) ? got : [];
+    return q.showIf.any.some(v => arr.includes(v));
+  });
 }
 
 function Logo() {
@@ -19,10 +28,20 @@ function Logo() {
   );
 }
 
+function Line({ placeholder, value, onChange }) {
+  return (
+    <label className="line">
+      <span>›</span>
+      <input placeholder={placeholder} value={value} onChange={onChange} />
+    </label>
+  );
+}
+
 function Survey() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(blank);
   const [done, setDone] = useState(null);
+  const qs = visible(answers);
 
   function pick(q, opt) {
     setAnswers(a => {
@@ -36,20 +55,21 @@ function Survey() {
 
   function ready() {
     if (step === 0) return true;
-    const q = S.questions[step - 1];
+    const q = qs[step - 1];
     if (!q) return true;
-    return q.type === 'text' || q.type === 'contact' || q.optional ? true : answers[q.id].length > 0;
+    if (q.type === 'text' || q.type === 'input' || q.optional) return true;
+    return answers[q.id].length > 0;
   }
 
   function go(n) {
     const next = step + n;
-    if (next > S.questions.length) {
+    if (next > qs.length) {
       const id = 'sbm_' + Math.random().toString(16).slice(2) + Date.now().toString(16);
       const at = new Date().toISOString();
       const list = JSON.parse(localStorage.getItem('surveys') || '[]');
       list.unshift({
         id, at,
-        answers: S.questions.map(q => {
+        answers: qs.map(q => {
           let value = answers[q.id];
           if (q.type === 'contact') {
             const c = answers[q.id];
@@ -76,7 +96,7 @@ function Survey() {
         <div className="nav"><button className="next wide" onClick={() => go(1)}>Next →</button></div>
       </>
     );
-  } else if (step > S.questions.length) {
+  } else if (step > qs.length) {
     inner = (
       <div className="body">
         <h1>{S.thanks}</h1>
@@ -85,7 +105,7 @@ function Survey() {
       </div>
     );
   } else {
-    const q = S.questions[step - 1];
+    const q = qs[step - 1];
     let fields;
     if (q.type === 'text') {
       fields = (
@@ -95,16 +115,24 @@ function Survey() {
           onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
         />
       );
+    } else if (q.type === 'input') {
+      fields = (
+        <Line
+          placeholder={q.placeholder || ''}
+          value={answers[q.id]}
+          onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+        />
+      );
     } else if (q.type === 'contact') {
       const c = answers[q.id];
       fields = (
         <div className="fields">
-          <input placeholder="Order Number" value={c.order} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, order: e.target.value } }))} />
+          <Line placeholder="Order Number" value={c.order} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, order: e.target.value } }))} />
           <div className="phone">
             <select value={c.code} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, code: e.target.value } }))}>
               {codes.map(x => <option key={x}>{x}</option>)}
             </select>
-            <input placeholder="Phone Number" value={c.phone} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, phone: e.target.value } }))} />
+            <input placeholder={q.phoneRequired ? 'Phone Number *' : 'Phone Number'} value={c.phone} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, phone: e.target.value } }))} />
           </div>
         </div>
       );
@@ -127,7 +155,7 @@ function Survey() {
         </div>
         <div className="nav">
           <button className="back" onClick={() => go(-1)}>← Previous</button>
-          <button className="next" disabled={!ready()} onClick={() => go(1)}>{step === S.questions.length ? 'Submit →' : 'Next →'}</button>
+          <button className="next" disabled={!ready()} onClick={() => go(1)}>{step === qs.length ? 'Submit →' : 'Next →'}</button>
         </div>
       </>
     );
@@ -137,7 +165,6 @@ function Survey() {
     <div className="page-survey">
       <div className="shell">
         <div className="card">{inner}</div>
-        <a className="admin" href="/admin">Admin dashboard</a>
       </div>
     </div>
   );
@@ -149,7 +176,7 @@ function Admin() {
   list.forEach(s => s.answers.forEach(a => {
     if (!qMap[a.id]) qMap[a.id] = { text: a.text, counts: {}, comments: [] };
     if (typeof a.value === 'string') { if (a.value) qMap[a.id].comments.push(a.value); }
-    else a.value.forEach(v => { qMap[a.id].counts[v] = (qMap[a.id].counts[v] || 0) + 1; });
+    else (a.value || []).forEach(v => { qMap[a.id].counts[v] = (qMap[a.id].counts[v] || 0) + 1; });
   }));
 
   return (

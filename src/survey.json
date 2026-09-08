@@ -18,7 +18,8 @@
       "text": "What did you like?",
       "type": "choice",
       "isMultiple": true,
-      "options": ["Ambiance", "Guest Service", "Food Quality"]
+      "options": ["Ambiance", "Guest Service", "Food Quality"],
+      "showIf": { "id": "q1", "any": ["Excellent", "Good"] }
     },
     {
       "id": "q3",
@@ -26,7 +27,45 @@
       "text": "What did you like about the guest service?",
       "type": "choice",
       "isMultiple": true,
-      "options": ["Speed of Service", "Friendliness", "Approachable", "Knowledge", "Grooming & Hygiene"]
+      "options": ["Speed of Service", "Friendliness", "Approachable", "Knowledge", "Grooming & Hygiene"],
+      "showIf": { "id": "q2", "any": ["Guest Service"] }
+    },
+    {
+      "id": "q6",
+      "label": "Feedback",
+      "text": "What can we improve?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Ambiance", "Guest Service", "Food Quality"],
+      "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
+    },
+    {
+      "id": "q7",
+      "label": "Feedback",
+      "text": "What can we improve about the guest service?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Speed of Service", "Friendliness", "Approachable", "Knowledge", "Grooming & Hygiene"],
+      "showIf": { "id": "q6", "any": ["Guest Service"] }
+    },
+    {
+      "id": "q8",
+      "label": "Feedback",
+      "text": "What can we improve about the food?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Taste", "Presentation", "Temperature", "Freshness"],
+      "showIf": { "id": "q6", "any": ["Food Quality"] }
+    },
+    {
+      "id": "q9",
+      "label": "Feedback",
+      "text": "What food items can we improve?",
+      "type": "input",
+      "isMultiple": false,
+      "optional": true,
+      "placeholder": "Food Item Names (E.g., Cheese Pizza)",
+      "showIf": { "id": "q6", "any": ["Food Quality"] }
     },
     {
       "id": "q4",
@@ -34,6 +73,7 @@
       "text": "Any other comments?",
       "type": "text",
       "isMultiple": false,
+      "optional": true,
       "placeholder": "Type here..."
     },
     {
@@ -42,7 +82,18 @@
       "text": "Please share your contact details for a chance to win a special prize!",
       "type": "contact",
       "isMultiple": false,
-      "optional": true
+      "optional": true,
+      "showIf": { "id": "q1", "any": ["Excellent", "Good"] }
+    },
+    {
+      "id": "q10",
+      "label": "We're sorry you did not have the best experience.",
+      "text": "Please share your contact details so that we can follow-up on any issues.",
+      "type": "contact",
+      "isMultiple": false,
+      "optional": true,
+      "phoneRequired": true,
+      "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
     }
   ]
 }
