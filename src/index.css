@@ -45,11 +45,14 @@ textarea { min-height: 110px; resize: none; margin-bottom: 18px; text-align: lef
 .phone { display: flex; gap: 8px; }
 .phone select { width: 88px; flex-shrink: 0; }
 .phone input { flex: 1; min-width: 0; text-align: left; }
+.hint { color: #c2410c; font-size: 12px; margin-top: 6px; }
 .nav { display: flex; justify-content: space-between; align-items: center; }
-.back { background: none; border: 0; color: #3d2412; font: inherit; font-size: 15px; min-height: 44px; cursor: pointer; }
+.back, .next { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ico { width: 18px; height: 18px; display: block; }
+.back { background: none; border: 0; color: #3d2412; font: inherit; font-size: 15px; font-weight: 600; min-height: 44px; cursor: pointer; }
 .next {
   background: #e6b800; color: #fff; border: 0; border-radius: 12px;
-  padding: 0 18px; min-height: 44px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  padding: 0 16px; min-height: 44px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .next.wide { width: 100%; }
 .next:disabled { opacity: .4; }

@@ -37,6 +37,26 @@ function Line({ placeholder, value, onChange }) {
   );
 }
 
+function Arrow({ dir }) {
+  return (
+    <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      {dir === 'left'
+        ? <path d="M15 6l-6 6 6 6" />
+        : <path d="M9 6l6 6-6 6" />}
+    </svg>
+  );
+}
+
+function digits(s) {
+  return (s || '').replace(/\D/g, '');
+}
+
+function phoneOk(s, required) {
+  const d = digits(s);
+  if (!d) return !required;
+  return d.length >= 10 && d.length <= 15;
+}
+
 function Survey() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(blank);
@@ -57,6 +77,7 @@ function Survey() {
     if (step === 0) return true;
     const q = qs[step - 1];
     if (!q) return true;
+    if (q.type === 'contact') return phoneOk(answers[q.id].phone, q.phoneRequired);
     if (q.type === 'text' || q.type === 'input' || q.optional) return true;
     return answers[q.id].length > 0;
   }
@@ -93,7 +114,7 @@ function Survey() {
           <p className="sub">{S.welcomeSub}</p>
           <h1>{S.welcomeTitle}</h1>
         </div>
-        <div className="nav"><button className="next wide" onClick={() => go(1)}>Next →</button></div>
+        <div className="nav"><button className="next wide" onClick={() => go(1)}>Next <Arrow /></button></div>
       </>
     );
   } else if (step > qs.length) {
@@ -134,8 +155,15 @@ function Survey() {
             <select value={c.code} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, code: e.target.value } }))}>
               {codes.map(x => <option key={x}>{x}</option>)}
             </select>
-            <input placeholder={q.phoneRequired ? 'Phone Number *' : 'Phone Number'} value={c.phone} onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, phone: e.target.value } }))} />
+            <input
+              type="tel"
+              inputMode="numeric"
+              placeholder={q.phoneRequired ? 'Phone Number *' : 'Phone Number'}
+              value={c.phone}
+              onChange={e => setAnswers(a => ({ ...a, [q.id]: { ...c, phone: digits(e.target.value) } }))}
+            />
           </div>
+          {c.phone && !phoneOk(c.phone, true) && <p className="hint">Enter a valid phone number</p>}
         </div>
       );
     } else {
@@ -156,8 +184,8 @@ function Survey() {
           {fields}
         </div>
         <div className="nav">
-          <button className="back" onClick={() => go(-1)}>← Previous</button>
-          <button className="next" disabled={!ready()} onClick={() => go(1)}>{step === qs.length ? 'Submit →' : 'Next →'}</button>
+          <button className="back" onClick={() => go(-1)}><Arrow dir="left" /> Previous</button>
+          <button className="next" disabled={!ready()} onClick={() => go(1)}>{step === qs.length ? 'Submit' : 'Next'} <Arrow /></button>
         </div>
       </>
     );
