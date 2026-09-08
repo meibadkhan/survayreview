@@ -64,8 +64,7 @@
       "type": "input",
       "isMultiple": false,
       "optional": true,
-      "placeholder": "Food Item Names (E.g., Cheese Pizza)",
-      "showIf": { "id": "q6", "any": ["Food Quality"] }
+      "placeholder": "Food Item Names (E.g., Cheese Pizza)"
     },
     {
       "id": "q4",

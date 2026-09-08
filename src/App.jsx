@@ -117,11 +117,13 @@ function Survey() {
       );
     } else if (q.type === 'input') {
       fields = (
-        <Line
-          placeholder={q.placeholder || ''}
-          value={answers[q.id]}
-          onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-        />
+        <div className="fields">
+          <Line
+            placeholder={q.placeholder || ''}
+            value={answers[q.id]}
+            onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+          />
+        </div>
       );
     } else if (q.type === 'contact') {
       const c = answers[q.id];
