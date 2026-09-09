@@ -196,7 +196,7 @@ function Survey() {
       <div className="shell">
         <div className="card">{inner}</div>
       </div>
-      {step === 0 && <p className="visit">thank you for visiting</p>}
+      {step === 0 && <p className="visit">Thank You For Visiting Us!</p>}
     </div>
   );
 }
