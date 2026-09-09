@@ -19,9 +19,9 @@ function visible(answers) {
   });
 }
 
-function Logo() {
+function Logo({ className = '' }) {
   return (
-    <svg className="logo" viewBox="0 0 64 64">
+    <svg className={`logo ${className}`} viewBox="0 0 64 64">
       <circle cx="32" cy="32" r="32" fill="#fff4e5" />
       <text x="32" y="40" textAnchor="middle" fontSize="28">🍔</text>
     </svg>
@@ -110,7 +110,6 @@ function Survey() {
     inner = (
       <>
         <div className="body">
-          <Logo />
           <p className="sub">{S.welcomeSub}</p>
           <h1>{S.welcomeTitle}</h1>
         </div>
@@ -192,10 +191,12 @@ function Survey() {
   }
 
   return (
-    <div className="page-survey">
+    <div className={`page-survey${step === 0 ? ' start' : ''}`}>
+      {step === 0 && <Logo className="out" />}
       <div className="shell">
         <div className="card">{inner}</div>
       </div>
+      {step === 0 && <p className="visit">thank you for visiting</p>}
     </div>
   );
 }
@@ -212,7 +213,7 @@ function Admin() {
   return (
     <div className="page-admin">
       <div className="wrap">
-        <h1>CrispyGo Admin</h1>
+        <h1>Guest Matrix Admin</h1>
         <p className="top">{list.length} responses · <a href="/">Back to survey</a></p>
         {!list.length && <div className="box">No responses yet.</div>}
         {Object.values(qMap).map(q => {
