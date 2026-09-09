@@ -118,7 +118,7 @@ function Survey() {
     );
   } else if (step > qs.length) {
     inner = (
-      <div className="body">
+      <div className="body done">
         <h1>{S.thanks}</h1>
         <Logo />
         <p className="meta">Survey completed at {new Date(done.at).toLocaleString()}<br />{done.id}</p>
