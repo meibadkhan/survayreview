@@ -40,8 +40,37 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 
+function cleanMongoUri(raw) {
+  let uri = String(raw || '').trim();
+  if (
+    (uri.startsWith('"') && uri.endsWith('"'))
+    || (uri.startsWith("'") && uri.endsWith("'"))
+  ) {
+    uri = uri.slice(1, -1).trim();
+  }
+  if (/<[^>]+>/.test(uri)) {
+    throw httpError(500, 'MONGODB_URI still has a placeholder like <db_username>. Paste the real username.');
+  }
+  try {
+    const parsed = new URL(uri);
+    if (parsed.password) {
+      try {
+        parsed.password = decodeURIComponent(parsed.password);
+      } catch {
+        /* already decoded */
+      }
+    }
+    if (!parsed.searchParams.has('authSource')) parsed.searchParams.set('authSource', 'admin');
+    if (!parsed.searchParams.has('retryWrites')) parsed.searchParams.set('retryWrites', 'true');
+    return parsed.toString();
+  } catch {
+    return uri;
+  }
+}
+
 function mongoUri() {
-  return process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || '';
+  const raw = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || '';
+  return raw ? cleanMongoUri(raw) : '';
 }
 
 export function mongoConfigured() {
@@ -105,6 +134,7 @@ async function getDb() {
       serverSelectionTimeoutMS: 12000,
       connectTimeoutMS: 12000,
       tls: true,
+      authSource: 'admin',
     });
     cache.promise = cache.client.connect().catch(err => {
       cache.promise = null;

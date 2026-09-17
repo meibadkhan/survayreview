@@ -34,6 +34,9 @@ function publicError(err) {
   if (/SSL|TLS|tlsv1|CERT|ENOTFOUND|ECONN|ETIMEOUT|server selection|MongoNetwork/i.test(msg)) {
     return 'Could not connect to MongoDB. Allow 0.0.0.0/0 in Atlas Network Access, then redeploy.';
   }
+  if (/auth|authentication|bad auth/i.test(msg)) {
+    return 'MongoDB username or password is wrong. Set MONGODB_URI on Vercel with meibadkhan_db_user and the Atlas password, plus authSource=admin, then redeploy.';
+  }
   return msg;
 }
 
