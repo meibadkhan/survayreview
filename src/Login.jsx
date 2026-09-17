@@ -6,14 +6,19 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
-    const user = login(username, password);
-    if (!user) {
-      setError('Wrong username or password');
-      return;
+    setError('');
+    try {
+      const user = await login(username, password);
+      if (!user) {
+        setError('Wrong username or password');
+        return;
+      }
+      window.location.href = isSuper(user) ? '/admin' : '/dashboard';
+    } catch {
+      setError('Could not reach the database');
     }
-    window.location.href = isSuper(user) ? '/admin' : '/dashboard';
   }
 
   return (

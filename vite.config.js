@@ -14,5 +14,7 @@ function localStateApi() {
 }
 
 export default defineConfig({
-  plugins: [react(), localStateApi()]
+  plugins: [react(), localStateApi()],
+  optimizeDeps: { exclude: ['mongodb'] },
+  ssr: { external: ['mongodb'] },
 });

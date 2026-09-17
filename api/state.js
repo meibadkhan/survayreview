@@ -1,4 +1,4 @@
-import { kvConfigured, loadState, mergeAndSave } from '../server/persist.js';
+import { mongoConfigured, loadState, handleAction } from '../server/persist.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -32,28 +32,23 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return send(res, 204, {});
 
   try {
-    if (req.method === 'GET') {
+    if (!mongoConfigured()) {
+      return send(res, 500, { error: 'MongoDB is not configured' });
+    }
+
+    if (req.method === 'GET' || req.method === 'PUT') {
       const state = await loadState();
-      return send(res, 200, { ...state, shared: kvConfigured() || !process.env.VERCEL });
+      return send(res, 200, { ...state, shared: true });
     }
 
-    const body = await readBody(req);
-
-    if (req.method === 'POST' && body.survey) {
-      const { next, saved } = await mergeAndSave({
-        surveys: [body.survey],
-        updatedAt: body.survey.at,
-      });
-      return send(res, 200, { ok: true, ...next, ...saved });
-    }
-
-    if (req.method === 'PUT' || req.method === 'POST') {
-      const { next, saved } = await mergeAndSave(body);
-      return send(res, 200, { ok: true, ...next, ...saved });
+    if (req.method === 'POST') {
+      const body = await readBody(req);
+      const next = await handleAction(body);
+      return send(res, 200, { ok: true, ...next, shared: true });
     }
 
     return send(res, 405, { error: 'Method not allowed' });
   } catch (err) {
-    return send(res, 500, { error: err.message || 'Store failed' });
+    return send(res, err.status || 500, { error: err.message || 'Store failed' });
   }
 }

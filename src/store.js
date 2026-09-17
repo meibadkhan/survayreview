@@ -7,7 +7,6 @@ const K = {
   session: 'gm_session',
   resetAt: 'gm_resetAt',
   updatedAt: 'gm_updatedAt',
-  removed: 'gm_removed',
 };
 
 export const SMILE = {
@@ -20,10 +19,15 @@ export const SMILE = {
 
 const listeners = new Set();
 let shared = false;
-let persistTimer = 0;
-let syncRev = 0;
-let pendingSave = false;
-let persistLock = Promise.resolve();
+let mutating = 0;
+
+const cache = {
+  users: [],
+  branches: [],
+  surveys: [],
+  resetAt: null,
+  updatedAt: null,
+};
 
 function read(key, fallback) {
   try {
@@ -35,141 +39,115 @@ function read(key, fallback) {
   }
 }
 
-function emptyRemoved() {
-  return { users: {}, branches: {}, surveys: {} };
-}
-
-function snapshot() {
-  return {
-    users: read(K.users, []),
-    branches: read(K.branches, []),
-    surveys: read(K.surveys, []),
-    resetAt: read(K.resetAt, null),
-    updatedAt: read(K.updatedAt, null),
-    removed: read(K.removed, emptyRemoved()),
-  };
-}
-
-function rememberRemoved(kind, id) {
-  const removed = read(K.removed, emptyRemoved());
-  removed[kind] = { ...(removed[kind] || {}), [id]: new Date().toISOString() };
-  localStorage.setItem(K.removed, JSON.stringify(removed));
-}
-
 function nowIso() {
   return new Date().toISOString();
 }
 
-function coreState(data) {
-  return JSON.stringify({
-    users: data.users || [],
-    branches: data.branches || [],
-    surveys: data.surveys || [],
-    resetAt: data.resetAt || null,
-  });
-}
-
-function markDirty() {
-  syncRev += 1;
-  pendingSave = true;
-  localStorage.setItem(K.updatedAt, JSON.stringify(new Date().toISOString()));
-}
-
-function applyRemote(data) {
-  if (!data || !Array.isArray(data.users)) return;
-  if (pendingSave) return;
-  const next = {
-    users: data.users,
-    branches: data.branches || [],
-    surveys: data.surveys || [],
-    resetAt: data.resetAt || null,
-    updatedAt: data.updatedAt || null,
+function snapshot() {
+  return {
+    users: cache.users,
+    branches: cache.branches,
+    surveys: cache.surveys,
+    resetAt: cache.resetAt,
+    updatedAt: cache.updatedAt,
   };
-  if (coreState(snapshot()) === coreState(next)) {
-    shared = !!data.shared;
-    return;
-  }
-  localStorage.setItem(K.users, JSON.stringify(next.users));
-  localStorage.setItem(K.branches, JSON.stringify(next.branches));
-  localStorage.setItem(K.surveys, JSON.stringify(next.surveys));
-  if (next.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(next.resetAt));
-  if (next.updatedAt) localStorage.setItem(K.updatedAt, JSON.stringify(next.updatedAt));
-  localStorage.setItem(K.removed, JSON.stringify(data.removed || emptyRemoved()));
-  shared = !!data.shared;
+}
+
+function persistCache() {
+  localStorage.setItem(K.users, JSON.stringify(cache.users));
+  localStorage.setItem(K.branches, JSON.stringify(cache.branches));
+  localStorage.setItem(K.surveys, JSON.stringify(cache.surveys));
+  if (cache.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(cache.resetAt));
+  if (cache.updatedAt) localStorage.setItem(K.updatedAt, JSON.stringify(cache.updatedAt));
+}
+
+function hydrate() {
+  cache.users = read(K.users, []);
+  cache.branches = read(K.branches, []);
+  cache.surveys = read(K.surveys, []);
+  cache.resetAt = read(K.resetAt, null);
+  cache.updatedAt = read(K.updatedAt, null);
+}
+
+function notify() {
+  persistCache();
   listeners.forEach(fn => fn());
 }
 
-function write(key, value, immediate = false) {
-  markDirty();
-  localStorage.setItem(key, JSON.stringify(value));
-  listeners.forEach(fn => fn());
-  if (immediate) {
-    clearTimeout(persistTimer);
-    persistTimer = 0;
-    persistFull().catch(() => {});
-  } else {
-    queuePersist();
+function applyState(data) {
+  if (!data || !Array.isArray(data.users)) return;
+  cache.users = data.users;
+  cache.branches = data.branches || [];
+  cache.surveys = data.surveys || [];
+  cache.resetAt = data.resetAt || null;
+  cache.updatedAt = data.updatedAt || null;
+  shared = data.shared !== false;
+  notify();
+}
+
+async function callApi(payload, method = 'POST') {
+  const res = await fetch('/api/state', {
+    method,
+    headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' },
+    body: method === 'GET' ? undefined : JSON.stringify(payload),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json.error || 'Save failed');
+    err.status = res.status;
+    throw err;
   }
+  return json;
 }
 
-function queuePersist() {
-  clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => {
-    persistTimer = 0;
-    persistFull().catch(() => {});
-  }, 250);
-}
-
-async function persistFull() {
-  persistLock = persistLock.then(runPersist, runPersist);
-  return persistLock;
-}
-
-async function runPersist() {
-  const rev = syncRev;
+async function mutate(action, extra = {}) {
+  mutating += 1;
   try {
-    const res = await fetch('/api/state', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(snapshot()),
-    });
-    if (!res.ok) {
-      queuePersist();
-      return;
-    }
-    const json = await res.json();
-    shared = !!json.shared;
-    if (syncRev === rev) {
-      pendingSave = false;
-      if (Array.isArray(json.users)) applyRemote(json);
-    } else await runPersist();
-  } catch {
-    shared = false;
-    queuePersist();
+    const json = await callApi({ action, ...extra });
+    applyState(json);
+    return json;
+  } catch (err) {
+    await pullServer().catch(() => {});
+    throw err;
+  } finally {
+    mutating -= 1;
   }
+}
+
+function queueMutate(action, extra = {}) {
+  mutate(action, extra).catch(() => {});
 }
 
 export async function pullServer() {
-  if (pendingSave || persistTimer) return false;
-  const rev = syncRev;
+  if (mutating) return false;
   try {
-    const res = await fetch('/api/state');
-    if (!res.ok) return false;
-    const data = await res.json();
-    if (pendingSave || persistTimer || syncRev !== rev) return false;
-    shared = !!data.shared;
+    const data = await callApi(null, 'GET');
+    shared = true;
     const local = snapshot();
-    const remoteEmpty = (data.users || []).length <= 1 && !(data.branches || []).length && !(data.surveys || []).length;
-    const localHas = local.users.length > 1 || local.branches.length || local.surveys.length;
-    if (remoteEmpty && !data.resetAt && localHas) {
-      pendingSave = true;
-      await persistFull();
+    const remoteEmpty = !(data.branches || []).length
+      && !(data.surveys || []).length
+      && (data.users || []).length <= 1;
+    const localHas = local.branches.length || local.surveys.length || local.users.length > 1;
+    if (remoteEmpty && localHas) {
+      mutating += 1;
+      try {
+        const migrated = await callApi({
+          action: 'migrate',
+          users: local.users,
+          branches: local.branches,
+          surveys: local.surveys,
+        });
+        applyState(migrated);
+      } finally {
+        mutating -= 1;
+      }
       return true;
     }
-    applyRemote({ ...data, shared });
+    applyState({ ...data, shared: true });
     return true;
   } catch {
     shared = false;
+    notify();
     return false;
   }
 }
@@ -207,46 +185,30 @@ export function branchIdFromLocation(loc = window.location) {
 }
 
 export function seed() {
-  const users = read(K.users, null);
-  if (users == null) {
-    localStorage.setItem(K.users, JSON.stringify([{
+  hydrate();
+  if (!cache.users.length) {
+    cache.users = [{
       id: 'usr_superadmin',
       username: 'superadmin',
       password: 'admin123',
       role: 'superadmin',
       branchIds: [],
-    }]));
-  } else {
-    const next = users.map(u => {
-      if (u.role === 'admin' || u.username === 'admin') {
-        return { ...u, role: 'superadmin', username: 'superadmin' };
-      }
-      return u;
-    });
-    if (JSON.stringify(next) !== JSON.stringify(users)) {
-      localStorage.setItem(K.users, JSON.stringify(next));
-    }
+    }];
+    persistCache();
   }
-  if (read(K.branches, null) == null) localStorage.setItem(K.branches, '[]');
-  if (read(K.surveys, null) == null) {
-    const old = read('surveys', []);
-    localStorage.setItem(K.surveys, JSON.stringify(Array.isArray(old) ? old : []));
-  }
-  pullServer().then(ok => {
-    if (!ok) persistFull().catch(() => {});
-  });
+  pullServer().catch(() => {});
 }
 
 export function getUsers() {
-  return read(K.users, []);
+  return cache.users;
 }
 
 export function getBranches() {
-  return read(K.branches, []);
+  return cache.branches;
 }
 
 export function getSurveys() {
-  return read(K.surveys, []);
+  return cache.surveys;
 }
 
 export function getSession() {
@@ -255,7 +217,8 @@ export function getSession() {
   return getUsers().find(u => u.id === id) || null;
 }
 
-export function login(username, password) {
+export async function login(username, password) {
+  await pullServer();
   const name = (username || '').trim().toLowerCase();
   const user = getUsers().find(u => {
     if (u.password !== password) return false;
@@ -283,8 +246,7 @@ export function createUser({ username, password, branchIds }) {
   const pass = (password || '').trim();
   if (!pass) return { error: 'Password is required' };
   if (pass.length < 4) return { error: 'Password must be at least 4 characters' };
-  const users = getUsers();
-  if (users.some(u => u.username.toLowerCase() === name.toLowerCase())) {
+  if (getUsers().some(u => u.username.toLowerCase() === name.toLowerCase())) {
     return { error: 'That username already exists' };
   }
   const user = {
@@ -295,7 +257,9 @@ export function createUser({ username, password, branchIds }) {
     branchIds: branchIds || [],
     updatedAt: nowIso(),
   };
-  write(K.users, [...users, user], true);
+  cache.users = [...cache.users, user];
+  notify();
+  queueMutate('createUser', { user });
   if ((branchIds || []).length) assignBranches(user.id, branchIds);
   return { user: getUsers().find(u => u.id === user.id) };
 }
@@ -303,14 +267,16 @@ export function createUser({ username, password, branchIds }) {
 export function assignBranches(userId, branchIds) {
   const unique = [...new Set(branchIds || [])];
   const at = nowIso();
-  write(K.users, getUsers().map(u => {
+  cache.users = getUsers().map(u => {
     let next = u;
     if (isSuper(u)) next = { ...u, branchIds: [] };
     else if (u.id === userId) next = { ...u, branchIds: unique };
     else next = { ...u, branchIds: (u.branchIds || []).filter(id => !unique.includes(id)) };
     if (JSON.stringify(next.branchIds || []) === JSON.stringify(u.branchIds || [])) return u;
     return { ...next, updatedAt: at };
-  }), true);
+  });
+  notify();
+  queueMutate('assignBranches', { userId, branchIds: unique });
 }
 
 export function ownerOfBranch(branchId) {
@@ -329,55 +295,58 @@ export function surveysForUser(user) {
 }
 
 export function updateUser(id, patch) {
-  const users = getUsers();
-  if (!users.some(u => u.id === id)) return { error: 'User not found' };
-  write(K.users, users.map(u => (u.id === id ? { ...u, ...patch } : u)));
+  if (!getUsers().some(u => u.id === id)) return { error: 'User not found' };
+  cache.users = getUsers().map(u => (u.id === id ? { ...u, ...patch, updatedAt: nowIso() } : u));
+  notify();
+  queueMutate('updateUser', { id, patch });
   return { ok: true };
 }
 
 export function resetPassword(id) {
-  const users = getUsers();
-  const target = users.find(u => u.id === id);
+  const target = getUsers().find(u => u.id === id);
   if (!target || isSuper(target)) return { error: 'Cannot reset this account' };
   const password = tempPassword();
-  write(K.users, users.map(u => (u.id === id ? { ...u, password, updatedAt: nowIso() } : u)));
+  cache.users = getUsers().map(u => (u.id === id ? { ...u, password, updatedAt: nowIso() } : u));
+  notify();
+  queueMutate('resetPassword', { id, password });
   return { password, username: target.username };
 }
 
 export function deleteUser(id) {
-  const users = getUsers();
-  const target = users.find(u => u.id === id);
+  const target = getUsers().find(u => u.id === id);
   if (!target) return { error: 'User not found' };
   if (isSuper(target)) return { error: 'The super admin account cannot be deleted' };
-  rememberRemoved('users', id);
-  write(K.users, users.filter(u => u.id !== id), true);
+  cache.users = getUsers().filter(u => u.id !== id);
   const sessionId = read(K.session, null);
   if (sessionId === id) localStorage.removeItem(K.session);
-  listeners.forEach(fn => fn());
+  notify();
+  queueMutate('deleteUser', { id });
   return { ok: true };
 }
 
 export function createBranch(name) {
   const label = (name || '').trim();
   if (!label) return { error: 'Branch name is required' };
-  const branches = getBranches();
-  if (branches.some(b => b.name.toLowerCase() === label.toLowerCase())) {
+  if (getBranches().some(b => b.name.toLowerCase() === label.toLowerCase())) {
     return { error: 'That branch already exists' };
   }
   const branch = { id: uid('br'), name: label, updatedAt: nowIso() };
-  write(K.branches, [...branches, branch], true);
+  cache.branches = [...cache.branches, branch];
+  notify();
+  queueMutate('createBranch', { branch });
   return { branch };
 }
 
 export function deleteBranch(id) {
-  rememberRemoved('branches', id);
-  write(K.branches, getBranches().filter(b => b.id !== id), true);
+  cache.branches = getBranches().filter(b => b.id !== id);
   const at = nowIso();
-  write(K.users, getUsers().map(u => {
+  cache.users = getUsers().map(u => {
     const branchIds = (u.branchIds || []).filter(x => x !== id);
     if (branchIds.length === (u.branchIds || []).length) return u;
     return { ...u, branchIds, updatedAt: at };
-  }), true);
+  });
+  notify();
+  queueMutate('deleteBranch', { id });
   return { ok: true };
 }
 
@@ -390,18 +359,15 @@ export function clearAllData(actor) {
     password: current.password,
     role: 'superadmin',
     branchIds: [],
+    updatedAt: nowIso(),
   };
-  markDirty();
-  localStorage.setItem(K.users, JSON.stringify([keep]));
-  localStorage.setItem(K.branches, JSON.stringify([]));
-  localStorage.setItem(K.surveys, JSON.stringify([]));
-  localStorage.setItem(K.resetAt, JSON.stringify(new Date().toISOString()));
-  localStorage.setItem(K.removed, JSON.stringify(emptyRemoved()));
+  cache.users = [keep];
+  cache.branches = [];
+  cache.surveys = [];
+  cache.resetAt = nowIso();
   localStorage.setItem(K.session, JSON.stringify(keep.id));
-  listeners.forEach(fn => fn());
-  clearTimeout(persistTimer);
-  persistTimer = 0;
-  persistFull().catch(() => {});
+  notify();
+  queueMutate('wipe', { keep });
   return { ok: true };
 }
 
@@ -412,8 +378,7 @@ export function experienceOf(answers) {
 }
 
 export function saveSurvey({ answers, branchId }) {
-  const branches = getBranches();
-  const branch = branches.find(b => b.id === branchId);
+  const branch = getBranches().find(b => b.id === branchId);
   const experience = experienceOf(answers);
   const survey = {
     id: uid('sbm'),
@@ -425,16 +390,9 @@ export function saveSurvey({ answers, branchId }) {
     smile: experience in SMILE ? SMILE[experience] : null,
     answers,
   };
-  write(K.surveys, [survey, ...getSurveys()]);
-  fetch('/api/state', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ survey }),
-  }).then(async res => {
-    if (!res.ok) return;
-    const json = await res.json();
-    shared = !!json.shared;
-  }).catch(() => {});
+  cache.surveys = [survey, ...cache.surveys];
+  notify();
+  queueMutate('saveSurvey', { survey });
   return survey;
 }
 

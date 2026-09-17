@@ -1,7 +1,45 @@
 import fs from 'fs';
 import path from 'path';
+import { MongoClient } from 'mongodb';
 
-const KEY = 'gm_state';
+const DB_NAME = process.env.MONGODB_DB || 'guestmatrix';
+const META_ID = 'app';
+
+function loadLocalEnv() {
+  if (process.env.MONGODB_URI) return;
+  for (const file of ['.env.local', '.env']) {
+    try {
+      const text = fs.readFileSync(path.join(process.cwd(), file), 'utf8');
+      for (const line of text.split('\n')) {
+        const row = line.trim();
+        if (!row || row.startsWith('#')) continue;
+        const i = row.indexOf('=');
+        if (i < 1) continue;
+        const key = row.slice(0, i).trim();
+        let value = row.slice(i + 1).trim();
+        if (
+          (value.startsWith('"') && value.endsWith('"'))
+          || (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+        if (!process.env[key]) process.env[key] = value;
+      }
+    } catch {
+      /* missing env file is fine */
+    }
+  }
+}
+
+loadLocalEnv();
+
+function mongoUri() {
+  return process.env.MONGODB_URI || '';
+}
+
+export function mongoConfigured() {
+  return !!mongoUri();
+}
 
 export function emptyState() {
   return {
@@ -16,154 +54,299 @@ export function emptyState() {
     surveys: [],
     resetAt: null,
     updatedAt: null,
-    removed: { users: {}, branches: {}, surveys: {} },
   };
 }
 
-function stamp(item) {
-  return Date.parse(item?.updatedAt || item?.at || 0) || 0;
+function nowIso() {
+  return new Date().toISOString();
 }
 
-function mergeRemoved(a = {}, b = {}) {
-  const out = { ...a };
-  Object.entries(b || {}).forEach(([id, ts]) => {
-    if (!out[id] || Date.parse(ts) >= Date.parse(out[id])) out[id] = ts;
-  });
-  return out;
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
 }
 
-function mergeList(a = [], b = []) {
-  const map = new Map();
-  [...a, ...b].forEach(item => {
-    if (!item?.id) return;
-    const prev = map.get(item.id);
-    if (!prev || stamp(item) >= stamp(prev)) map.set(item.id, item);
-  });
-  return [...map.values()];
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function applyRemoved(list, removed = {}) {
-  return (list || []).filter(item => {
-    const ts = removed[item.id];
-    if (!ts) return true;
-    return stamp(item) > Date.parse(ts);
-  });
+function plain(doc) {
+  if (!doc) return null;
+  const { _id, ...rest } = doc;
+  return rest;
 }
 
-export function mergeState(current, incoming) {
-  if (!incoming) return current;
-  const incomingReset = incoming.resetAt || null;
-  const currentReset = current.resetAt || null;
-  if (incomingReset && (!currentReset || incomingReset > currentReset)) {
-    return {
-      users: incoming.users || [],
-      branches: incoming.branches || [],
-      surveys: incoming.surveys || [],
-      resetAt: incomingReset,
-      updatedAt: incoming.updatedAt || new Date().toISOString(),
-      removed: incoming.removed || { users: {}, branches: {}, surveys: {} },
-    };
+function plainList(docs) {
+  return (docs || []).map(plain);
+}
+
+const globalCache = globalThis;
+if (!globalCache.__gmMongo) {
+  globalCache.__gmMongo = { client: null, promise: null, indexed: false };
+}
+
+async function getDb() {
+  const uri = mongoUri();
+  if (!uri) throw httpError(500, 'MongoDB is not configured');
+  const cache = globalCache.__gmMongo;
+  if (!cache.promise) {
+    cache.client = new MongoClient(uri, { maxPoolSize: 5 });
+    cache.promise = cache.client.connect();
   }
-  const removed = {
-    users: mergeRemoved(current.removed?.users, incoming.removed?.users),
-    branches: mergeRemoved(current.removed?.branches, incoming.removed?.branches),
-    surveys: mergeRemoved(current.removed?.surveys, incoming.removed?.surveys),
-  };
+  const client = await cache.promise;
+  return client.db(DB_NAME);
+}
+
+async function collections() {
+  const database = await getDb();
+  if (!globalCache.__gmMongo.indexed) {
+    await Promise.all([
+      database.collection('users').createIndex({ id: 1 }, { unique: true }),
+      database.collection('users').createIndex({ username: 1 }, { unique: true }),
+      database.collection('branches').createIndex({ id: 1 }, { unique: true }),
+      database.collection('surveys').createIndex({ id: 1 }, { unique: true }),
+      database.collection('surveys').createIndex({ at: -1 }),
+    ]).catch(() => {});
+    globalCache.__gmMongo.indexed = true;
+  }
   return {
-    users: applyRemoved(mergeList(current.users, incoming.users), removed.users),
-    branches: applyRemoved(mergeList(current.branches, incoming.branches), removed.branches),
-    surveys: applyRemoved(mergeList(current.surveys, incoming.surveys), removed.surveys)
-      .sort((x, y) => String(y.at || '').localeCompare(String(x.at || ''))),
-    resetAt: currentReset || incomingReset,
-    updatedAt: incoming.updatedAt || current.updatedAt || new Date().toISOString(),
-    removed,
+    users: database.collection('users'),
+    branches: database.collection('branches'),
+    surveys: database.collection('surveys'),
+    meta: database.collection('meta'),
   };
 }
 
-export function kvConfigured() {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+async function ensureSeed(cols) {
+  const count = await cols.users.countDocuments();
+  if (count) return;
+  const seed = emptyState().users[0];
+  await cols.users.insertOne({ ...seed, updatedAt: nowIso() });
 }
 
-async function kvCommand(command) {
-  const url = process.env.KV_REST_API_URL;
-  const token = process.env.KV_REST_API_TOKEN;
-  if (!url || !token) return null;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(command),
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
-function filePath() {
-  const dir = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), '.data');
-  return path.join(dir, 'state.json');
-}
-
-function readFileState() {
-  try {
-    return JSON.parse(fs.readFileSync(filePath(), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeFileState(state) {
-  const file = filePath();
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(state));
+async function touchMeta(cols, extra = {}) {
+  const updatedAt = nowIso();
+  await cols.meta.updateOne(
+    { _id: META_ID },
+    { $set: { ...extra, updatedAt } },
+    { upsert: true },
+  );
+  return updatedAt;
 }
 
 export async function loadState() {
-  if (kvConfigured()) {
-    const json = await kvCommand(['GET', KEY]);
-    const raw = json?.result;
-    if (!raw) return emptyState();
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
-  }
-  return readFileState() || emptyState();
-}
-
-export async function saveState(state) {
-  const next = {
-    users: state.users || [],
-    branches: state.branches || [],
-    surveys: state.surveys || [],
-    resetAt: state.resetAt || null,
-    updatedAt: state.updatedAt || null,
-    removed: state.removed || { users: {}, branches: {}, surveys: {} },
+  const cols = await collections();
+  await ensureSeed(cols);
+  const [users, branches, surveys, meta] = await Promise.all([
+    cols.users.find({}, { projection: { _id: 0 } }).toArray(),
+    cols.branches.find({}, { projection: { _id: 0 } }).toArray(),
+    cols.surveys.find({}, { projection: { _id: 0 } }).sort({ at: -1 }).toArray(),
+    cols.meta.findOne({ _id: META_ID }),
+  ]);
+  return {
+    users: plainList(users),
+    branches: plainList(branches),
+    surveys: plainList(surveys),
+    resetAt: meta?.resetAt || null,
+    updatedAt: meta?.updatedAt || null,
   };
-  if (kvConfigured()) {
-    await kvCommand(['SET', KEY, JSON.stringify(next)]);
-    return { shared: true };
-  }
-  writeFileState(next);
-  return { shared: !process.env.VERCEL };
 }
 
-function sameIds(a = [], b = []) {
-  if (a.length !== b.length) return false;
-  const ids = new Set(a.map(item => item.id));
-  return b.every(item => ids.has(item.id));
+async function findUserByName(cols, username) {
+  return cols.users.findOne({
+    username: { $regex: `^${escapeRegex(username)}$`, $options: 'i' },
+  });
 }
 
-export async function mergeAndSave(incoming) {
-  let next = mergeState(await loadState(), incoming);
-  let saved = await saveState(next);
-  const after = await loadState();
-  const again = mergeState(after, incoming);
-  if (
-    !sameIds(after.users, again.users) ||
-    !sameIds(after.branches, again.branches) ||
-    !sameIds(after.surveys, again.surveys)
-  ) {
-    next = again;
-    saved = await saveState(next);
+async function createUser(user) {
+  const cols = await collections();
+  await ensureSeed(cols);
+  if (!user?.id || !user?.username || !user?.password) {
+    throw httpError(400, 'Username and password are required');
   }
-  return { next, saved };
+  if (await findUserByName(cols, user.username)) {
+    throw httpError(409, 'That username already exists');
+  }
+  const doc = {
+    id: user.id,
+    username: String(user.username).trim(),
+    password: String(user.password),
+    role: 'user',
+    branchIds: Array.isArray(user.branchIds) ? user.branchIds : [],
+    updatedAt: user.updatedAt || nowIso(),
+  };
+  await cols.users.insertOne(doc);
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function updateUser(id, patch = {}) {
+  const cols = await collections();
+  const current = await cols.users.findOne({ id });
+  if (!current) throw httpError(404, 'User not found');
+  const next = { ...patch, updatedAt: nowIso() };
+  delete next.id;
+  delete next._id;
+  if (current.role === 'superadmin' || current.role === 'admin') {
+    next.role = 'superadmin';
+    next.branchIds = [];
+  }
+  await cols.users.updateOne({ id }, { $set: next });
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function deleteUser(id) {
+  const cols = await collections();
+  const current = await cols.users.findOne({ id });
+  if (!current) throw httpError(404, 'User not found');
+  if (current.role === 'superadmin' || current.role === 'admin') {
+    throw httpError(400, 'The super admin account cannot be deleted');
+  }
+  await cols.users.deleteOne({ id });
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function createBranch(branch) {
+  const cols = await collections();
+  await ensureSeed(cols);
+  const name = String(branch?.name || '').trim();
+  if (!branch?.id || !name) throw httpError(400, 'Branch name is required');
+  const clash = await cols.branches.findOne({
+    name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' },
+  });
+  if (clash) throw httpError(409, 'That branch already exists');
+  await cols.branches.insertOne({
+    id: branch.id,
+    name,
+    updatedAt: branch.updatedAt || nowIso(),
+  });
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function deleteBranch(id) {
+  const cols = await collections();
+  await cols.branches.deleteOne({ id });
+  await cols.users.updateMany({}, { $pull: { branchIds: id } });
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function assignBranches(userId, branchIds) {
+  const cols = await collections();
+  const unique = [...new Set(branchIds || [])];
+  const at = nowIso();
+  await cols.users.updateMany(
+    { id: { $ne: userId }, role: { $nin: ['superadmin', 'admin'] } },
+    { $pull: { branchIds: { $in: unique } }, $set: { updatedAt: at } },
+  );
+  await cols.users.updateOne(
+    { id: userId, role: { $nin: ['superadmin', 'admin'] } },
+    { $set: { branchIds: unique, updatedAt: at } },
+  );
+  await cols.users.updateMany(
+    { role: { $in: ['superadmin', 'admin'] } },
+    { $set: { branchIds: [], updatedAt: at } },
+  );
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function resetPassword(id, password) {
+  const cols = await collections();
+  const current = await cols.users.findOne({ id });
+  if (!current || current.role === 'superadmin' || current.role === 'admin') {
+    throw httpError(400, 'Cannot reset this account');
+  }
+  if (!password) throw httpError(400, 'Password is required');
+  await cols.users.updateOne({ id }, { $set: { password, updatedAt: nowIso() } });
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function saveSurvey(survey) {
+  const cols = await collections();
+  await ensureSeed(cols);
+  if (!survey?.id) throw httpError(400, 'Survey is required');
+  await cols.surveys.updateOne(
+    { id: survey.id },
+    { $set: { ...survey, updatedAt: survey.updatedAt || nowIso() } },
+    { upsert: true },
+  );
+  await touchMeta(cols);
+  return loadState();
+}
+
+async function wipe(keep) {
+  const cols = await collections();
+  if (!keep?.id) throw httpError(400, 'Not allowed');
+  const current = await cols.users.findOne({ id: keep.id }) || keep;
+  const next = {
+    id: current.id,
+    username: current.username || keep.username,
+    password: keep.password || current.password,
+    role: 'superadmin',
+    branchIds: [],
+    updatedAt: nowIso(),
+  };
+  await cols.surveys.deleteMany({});
+  await cols.branches.deleteMany({});
+  await cols.users.deleteMany({});
+  await cols.users.insertOne(next);
+  const resetAt = nowIso();
+  await cols.meta.updateOne(
+    { _id: META_ID },
+    { $set: { resetAt, updatedAt: resetAt } },
+    { upsert: true },
+  );
+  return loadState();
+}
+
+async function migrate(snapshot) {
+  const cols = await collections();
+  await ensureSeed(cols);
+  const [branchCount, surveyCount, userCount] = await Promise.all([
+    cols.branches.countDocuments(),
+    cols.surveys.countDocuments(),
+    cols.users.countDocuments(),
+  ]);
+  if (branchCount || surveyCount || userCount > 1) return loadState();
+  const users = Array.isArray(snapshot?.users) ? snapshot.users : [];
+  const branches = Array.isArray(snapshot?.branches) ? snapshot.branches : [];
+  const surveys = Array.isArray(snapshot?.surveys) ? snapshot.surveys : [];
+  if (users.length) {
+    await Promise.all(users.filter(u => u?.id).map(user => (
+      cols.users.updateOne({ id: user.id }, { $set: { ...user, updatedAt: user.updatedAt || nowIso() } }, { upsert: true })
+    )));
+  }
+  if (branches.length) {
+    await Promise.all(branches.filter(b => b?.id).map(branch => (
+      cols.branches.updateOne({ id: branch.id }, { $set: { ...branch, updatedAt: branch.updatedAt || nowIso() } }, { upsert: true })
+    )));
+  }
+  if (surveys.length) {
+    await Promise.all(surveys.filter(s => s?.id).map(survey => (
+      cols.surveys.updateOne({ id: survey.id }, { $set: { ...survey, updatedAt: survey.updatedAt || survey.at || nowIso() } }, { upsert: true })
+    )));
+  }
+  await touchMeta(cols);
+  return loadState();
+}
+
+export async function handleAction(body = {}) {
+  const action = body.action || (body.survey ? 'saveSurvey' : '');
+  if (action === 'saveSurvey') return saveSurvey(body.survey);
+  if (action === 'createUser') return createUser(body.user);
+  if (action === 'updateUser') return updateUser(body.id, body.patch || {});
+  if (action === 'deleteUser') return deleteUser(body.id);
+  if (action === 'createBranch') return createBranch(body.branch);
+  if (action === 'deleteBranch') return deleteBranch(body.id);
+  if (action === 'assignBranches') return assignBranches(body.userId, body.branchIds || []);
+  if (action === 'resetPassword') return resetPassword(body.id, body.password);
+  if (action === 'wipe') return wipe(body.keep);
+  if (action === 'migrate') return migrate(body);
+  throw httpError(400, 'Unknown action');
 }
