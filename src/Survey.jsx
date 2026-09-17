@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import S from './survey.json';
-import { saveSurvey, useData } from './store';
+import { branchIdFromLocation, saveSurvey, useData } from './store';
 
 const codes = ['+92', '+1', '+44', '+971'];
 
@@ -60,7 +60,7 @@ function phoneOk(s, required) {
 
 export default function Survey() {
   const { branches } = useData();
-  const [branchId] = useState(() => new URLSearchParams(window.location.search).get('branch') || '');
+  const [branchId] = useState(() => branchIdFromLocation());
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(blank);
   const [done, setDone] = useState(null);

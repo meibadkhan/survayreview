@@ -155,7 +155,7 @@ textarea { min-height: 100px; max-height: 28vh; resize: none; margin-bottom: 12p
   display: flex; align-items: center; gap: 14px; margin-top: 12px;
   padding-top: 12px; border-top: 1px solid #f3f4f6;
 }
-.qr-row canvas {
+.qr-row canvas, .qr-img {
   width: 168px; height: 168px; border-radius: 12px; background: #fff;
   border: 1px solid #e5e7eb; flex: 0 0 auto;
 }

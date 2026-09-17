@@ -113,6 +113,21 @@ export function isSuper(user) {
   return user?.role === 'superadmin' || user?.role === 'admin';
 }
 
+export function surveyPath(branchId) {
+  return `/b/${encodeURIComponent(branchId)}`;
+}
+
+export function surveyLink(branchId) {
+  return `${window.location.origin}${surveyPath(branchId)}`;
+}
+
+export function branchIdFromLocation(loc = window.location) {
+  const path = (loc.pathname || '').replace(/\/+$/, '') || '/';
+  const fromPath = path.match(/^\/b\/([^/]+)$/);
+  if (fromPath) return decodeURIComponent(fromPath[1]);
+  return new URLSearchParams(loc.search).get('branch') || '';
+}
+
 export function seed() {
   const users = read(K.users, null);
   if (users == null) {

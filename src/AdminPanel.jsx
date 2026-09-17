@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import {
   assignBranches,
@@ -8,12 +8,9 @@ import {
   deleteUser,
   ownerOfBranch,
   resetPassword,
+  surveyLink,
   useData,
 } from './store';
-
-function surveyLink(branchId) {
-  return `${window.location.origin}/?branch=${branchId}`;
-}
 
 function fileSafe(name) {
   return String(name || 'branch').replace(/[^\w.-]+/g, '-').replace(/-+/g, '-');
@@ -28,24 +25,24 @@ function escapeHtml(value) {
 }
 
 function BranchQr({ url, name }) {
-  const canvasRef = useRef(null);
+  const [src, setSrc] = useState('');
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    QRCode.toCanvas(canvas, url, {
-      width: 168,
-      margin: 1,
+    let live = true;
+    QRCode.toDataURL(url, {
+      width: 280,
+      margin: 2,
+      errorCorrectionLevel: 'M',
       color: { dark: '#111827', light: '#ffffff' },
-    }).catch(() => {});
+    }).then(data => {
+      if (live) setSrc(data);
+    }).catch(() => {
+      if (live) setSrc('');
+    });
+    return () => { live = false; };
   }, [url]);
 
-  function png() {
-    return canvasRef.current?.toDataURL('image/png') || '';
-  }
-
   function downloadQr() {
-    const src = png();
     if (!src) return;
     const a = document.createElement('a');
     a.href = src;
@@ -54,7 +51,6 @@ function BranchQr({ url, name }) {
   }
 
   function printQr() {
-    const src = png();
     if (!src) return;
     const w = window.open('', '_blank', 'width=480,height=680');
     if (!w) return;
@@ -73,7 +69,9 @@ function BranchQr({ url, name }) {
 
   return (
     <div className="qr-row">
-      <canvas ref={canvasRef} width={168} height={168} aria-label={`${name} survey QR code`} />
+      {src
+        ? <img className="qr-img" src={src} width={168} height={168} alt={`${name} survey QR code`} />
+        : <div className="qr-img" />}
       <div className="qr-actions">
         <p className="muted">Guests scan this code to open the {name} survey.</p>
         <button type="button" className="ghost-btn" onClick={downloadQr}>Download QR</button>

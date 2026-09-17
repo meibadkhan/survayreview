@@ -3,14 +3,15 @@ import AdminPanel from './AdminPanel.jsx';
 import Dashboard from './Dashboard.jsx';
 import Login from './Login.jsx';
 import Survey from './Survey.jsx';
-import { isSuper, logout, seed, useData } from './store';
+import { branchIdFromLocation, isSuper, logout, seed, useData } from './store';
 
 seed();
 
 function pathOf() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  const branch = new URLSearchParams(window.location.search).get('branch');
-  if (path === '/login' || (path === '/' && !branch)) return 'login';
+  const branch = branchIdFromLocation();
+  if (path.startsWith('/b/') || (path === '/' && branch)) return 'survey';
+  if (path === '/login' || path === '/') return 'login';
   if (path === '/admin') return 'admin';
   if (path === '/dashboard') return 'dashboard';
   return 'survey';

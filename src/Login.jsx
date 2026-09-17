@@ -21,20 +21,19 @@ export default function Login() {
       <div className="login-wrap">
         <p className="dash-kicker">Guest Matrix</p>
         <h1 className="login-title">Staff login</h1>
-        <p className="login-sub">Super admin creates branches and users. Guest reviews are saved and shown to the assigned branch user. For Vercel testing, add KV so every phone shares the same data.</p>
+        <p className="login-sub">Sign in to view guest feedback for your restaurant.</p>
         <form className="panel" onSubmit={submit}>
           <label className="field">
             <span>Username</span>
-            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="ibadkhan" autoComplete="username" />
+            <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" />
           </label>
           <label className="field">
             <span>Password</span>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
           </label>
           {error && <p className="form-error">{error}</p>}
           <button className="btn-primary" type="submit">Sign in</button>
         </form>
-        <p className="login-hint">Super admin: <b>superadmin</b> / <b>admin123</b></p>
       </div>
     </div>
   );
