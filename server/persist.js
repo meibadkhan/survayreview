@@ -1,6 +1,13 @@
+import dns from 'dns';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { MongoClient } from 'mongodb';
+
+dns.setDefaultResultOrder('ipv4first');
+if (typeof net.setDefaultAutoSelectFamily === 'function') {
+  net.setDefaultAutoSelectFamily(false);
+}
 
 const DB_NAME = process.env.MONGODB_DB || 'guestmatrix';
 const META_ID = 'app';
@@ -92,11 +99,18 @@ async function getDb() {
   const cache = globalCache.__gmMongo;
   if (!cache.promise) {
     cache.client = new MongoClient(uri, {
-      maxPoolSize: 5,
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 8000,
+      maxPoolSize: 1,
+      minPoolSize: 0,
+      maxIdleTimeMS: 15000,
+      serverSelectionTimeoutMS: 12000,
+      connectTimeoutMS: 12000,
+      tls: true,
     });
-    cache.promise = cache.client.connect();
+    cache.promise = cache.client.connect().catch(err => {
+      cache.promise = null;
+      cache.client = null;
+      throw err;
+    });
   }
   const client = await cache.promise;
   return client.db(DB_NAME);

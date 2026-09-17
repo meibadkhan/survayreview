@@ -29,6 +29,14 @@ function withShare(state) {
   return { ...state, shared: isSharedStore() };
 }
 
+function publicError(err) {
+  const msg = err?.message || 'Store failed';
+  if (/SSL|TLS|tlsv1|CERT|ENOTFOUND|ECONN|ETIMEOUT|server selection|MongoNetwork/i.test(msg)) {
+    return 'Could not connect to MongoDB. Allow 0.0.0.0/0 in Atlas Network Access, then redeploy.';
+  }
+  return msg;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS');
@@ -63,6 +71,6 @@ export default async function handler(req, res) {
 
     return send(res, 405, { error: 'Method not allowed' });
   } catch (err) {
-    return send(res, err.status || 500, { error: err.message || 'Store failed' });
+    return send(res, err.status || 500, { error: publicError(err) });
   }
 }
