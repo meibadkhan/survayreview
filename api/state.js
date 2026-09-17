@@ -1,4 +1,4 @@
-import { isSharedStore, loadState, handleAction, applySnapshot } from '../server/persist.js';
+import { isSharedStore, loadState, handleAction } from '../server/persist.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -47,29 +47,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return send(res, 204, {});
 
   try {
-    if (req.method === 'GET') {
-      const state = await loadState();
-      return send(res, 200, withShare(state));
-    }
-
-    const body = await readBody(req);
-
-    if (req.method === 'POST' && (body.action || body.survey)) {
-      const next = await handleAction(body);
-      return send(res, 200, { ok: true, ...withShare(next) });
-    }
-
-    if (req.method === 'PUT' || req.method === 'POST') {
-      if (body.action || body.survey) {
-        const next = await handleAction(body);
-        return send(res, 200, { ok: true, ...withShare(next) });
-      }
-      if (body.users || body.branches || body.surveys) {
-        const next = await applySnapshot(body);
-        return send(res, 200, { ok: true, ...withShare(next) });
-      }
+    if (req.method === 'GET' || req.method === 'PUT') {
       const state = await loadState();
       return send(res, 200, { ok: true, ...withShare(state) });
+    }
+
+    if (req.method === 'POST') {
+      const body = await readBody(req);
+      const next = await handleAction(body);
+      return send(res, 200, { ok: true, ...withShare(next) });
     }
 
     return send(res, 405, { error: 'Method not allowed' });

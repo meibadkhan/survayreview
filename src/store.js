@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 
 const K = {
-  users: 'gm_users',
-  branches: 'gm_branches',
-  surveys: 'gm_surveys',
   session: 'gm_session',
-  resetAt: 'gm_resetAt',
-  updatedAt: 'gm_updatedAt',
 };
+
+const OLD_KEYS = [
+  'gm_users',
+  'gm_branches',
+  'gm_surveys',
+  'gm_resetAt',
+  'gm_updatedAt',
+  'gm_removed',
+];
 
 export const SMILE = {
   Excellent: 100,
@@ -44,34 +48,19 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function snapshot() {
-  return {
-    users: cache.users,
-    branches: cache.branches,
-    surveys: cache.surveys,
-    resetAt: cache.resetAt,
-    updatedAt: cache.updatedAt,
-  };
+function clearOldLocalData() {
+  OLD_KEYS.forEach(key => localStorage.removeItem(key));
 }
 
-function persistCache() {
-  localStorage.setItem(K.users, JSON.stringify(cache.users));
-  localStorage.setItem(K.branches, JSON.stringify(cache.branches));
-  localStorage.setItem(K.surveys, JSON.stringify(cache.surveys));
-  if (cache.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(cache.resetAt));
-  if (cache.updatedAt) localStorage.setItem(K.updatedAt, JSON.stringify(cache.updatedAt));
-}
-
-function hydrate() {
-  cache.users = read(K.users, []);
-  cache.branches = read(K.branches, []);
-  cache.surveys = read(K.surveys, []);
-  cache.resetAt = read(K.resetAt, null);
-  cache.updatedAt = read(K.updatedAt, null);
+function resetCache() {
+  cache.users = [];
+  cache.branches = [];
+  cache.surveys = [];
+  cache.resetAt = null;
+  cache.updatedAt = null;
 }
 
 function notify() {
-  persistCache();
   listeners.forEach(fn => fn());
 }
 
@@ -126,33 +115,12 @@ export async function pullServer() {
   if (mutating) return false;
   try {
     const data = await callApi(null, 'GET');
-    shared = true;
-    const local = snapshot();
-    const remoteEmpty = !(data.branches || []).length
-      && !(data.surveys || []).length
-      && (data.users || []).length <= 1;
-    const localHas = local.branches.length || local.surveys.length || local.users.length > 1;
-    if (remoteEmpty && localHas) {
-      mutating += 1;
-      try {
-        const migrated = await callApi({
-          action: 'migrate',
-          users: local.users,
-          branches: local.branches,
-          surveys: local.surveys,
-        });
-        applyState(migrated);
-      } finally {
-        mutating -= 1;
-      }
-      return true;
-    }
     applyState({ ...data, shared: true });
-    lastError = '';
     return true;
   } catch (err) {
     shared = false;
     lastError = err?.message || 'Could not reach the database';
+    resetCache();
     notify();
     return false;
   }
@@ -195,17 +163,8 @@ export function branchIdFromLocation(loc = window.location) {
 }
 
 export function seed() {
-  hydrate();
-  if (!cache.users.length) {
-    cache.users = [{
-      id: 'usr_superadmin',
-      username: 'superadmin',
-      password: 'admin123',
-      role: 'superadmin',
-      branchIds: [],
-    }];
-    persistCache();
-  }
+  clearOldLocalData();
+  resetCache();
   pullServer().catch(() => {});
 }
 
