@@ -177,6 +177,17 @@ textarea { min-height: 100px; max-height: 28vh; resize: none; margin-bottom: 12p
 .kpi-delta { margin-top: 8px; font-size: 12px; color: #6b7280; }
 .kpi-delta.up { color: #16a34a; }
 .kpi-delta.down { color: #dc2626; }
+.kpi.tap { cursor: pointer; }
+.kpi.tap:hover, .kpi.tap.on { border-color: #cbd5e1; }
+.comment-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.comment-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px 16px;
+}
+.comment-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 8px; }
+.comment-top b { font-size: 15px; }
+.comment-rating { font-size: 12px; font-weight: 700; color: #047857; margin: 0 0 10px; }
+.comment-card p { margin: 8px 0; font-size: 14px; color: #111827; }
+.comment-card p span { display: block; font-size: 12px; color: #6b7280; margin-bottom: 2px; }
 .target {
   font-size: 12px; color: #047857; background: #ecfdf5; border-radius: 999px; padding: 4px 10px; font-weight: 600;
 }

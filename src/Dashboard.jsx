@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import {
   SMILE,
   branchesForUser,
+  commentDetails,
+  commentSubmissions,
   greeting,
   inRange,
   periodRange,
@@ -63,6 +65,15 @@ function WarnIcon() {
   );
 }
 
+function NoteIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748b" strokeWidth="2">
+      <path d="M4 5h16v14H8l-4 3V5z" />
+      <path d="M8 10h8M8 14h5" />
+    </svg>
+  );
+}
+
 function PinIcon() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#64748b" strokeWidth="2">
@@ -80,6 +91,7 @@ export default function Dashboard({ user, onLogout }) {
   const [preset, setPreset] = useState('custom');
   const [from, setFrom] = useState(() => monthStart());
   const [to, setTo] = useState(() => ymd(new Date()));
+  const [openComments, setOpenComments] = useState(false);
   const range = periodRange(preset, new Date(), { from, to });
 
   const visibleIds = useMemo(() => {
@@ -98,6 +110,9 @@ export default function Dashboard({ user, onLogout }) {
   const smileDelta = was.total === 0 ? { dir: 'flat', text: '0.0' } : delta(now.smile, was.smile, 'points');
   const subDelta = delta(now.total, was.total, 'pct');
   const terribleDelta = delta(now.terrible, was.terrible, 'pct');
+  const comments = commentSubmissions(current);
+  const prevComments = commentSubmissions(previous);
+  const commentDelta = delta(comments.length, prevComments.length, 'pct');
   const maxRating = Math.max(1, ...Object.values(now.byRating));
 
   function applyPreset(next) {
@@ -189,12 +204,46 @@ export default function Dashboard({ user, onLogout }) {
                 <div className="kpi-value">{now.terrible}</div>
                 <p className={`kpi-delta ${terribleDelta.dir}`}>{terribleDelta.dir === 'down' ? '↘' : terribleDelta.dir === 'up' ? '↗' : '→'} {terribleDelta.text} vs previous period</p>
               </article>
-              <article className="kpi">
-                <div className="kpi-label">Positive</div>
-                <div className="kpi-value">{now.positive}</div>
-                <p className="kpi-delta flat">Excellent and Good</p>
+              <article
+                className={`kpi tap${openComments ? ' on' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpenComments(v => !v)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenComments(v => !v); } }}
+              >
+                <div className="kpi-label">Comments <NoteIcon /></div>
+                <div className="kpi-value">{comments.length}</div>
+                <p className={`kpi-delta ${commentDelta.dir}`}>{commentDelta.dir === 'down' ? '↘' : commentDelta.dir === 'up' ? '↗' : '→'} {commentDelta.text} vs previous period</p>
+                <p className="kpi-delta flat">Tap to {openComments ? 'hide' : 'view'} cards</p>
               </article>
             </div>
+
+            {openComments && (
+              <div className="comment-list">
+                <div className="row-head">
+                  <h2>Comments</h2>
+                  <button type="button" className="ghost-btn" onClick={() => setOpenComments(false)}>Close</button>
+                </div>
+                <p className="panel-sub">{comments.length === 1 ? '1 submission' : `${comments.length} submissions`} with food items, comments, phone or order number</p>
+                {!comments.length && <div className="panel"><p className="muted">No comments in this date range.</p></div>}
+                {comments.map(s => {
+                  const d = commentDetails(s);
+                  return (
+                    <article className="comment-card" key={s.id}>
+                      <div className="comment-top">
+                        <b>{s.branchName}</b>
+                        <span className="muted">{new Date(s.at).toLocaleString()}</span>
+                      </div>
+                      {s.experience && <p className="comment-rating">{s.experience}</p>}
+                      <p><span>What food items can we improve?</span>{d.food || '—'}</p>
+                      <p><span>Comment</span>{d.comment || '—'}</p>
+                      <p><span>Order number</span>{d.order || '—'}</p>
+                      <p><span>Phone number</span>{d.phone || '—'}</p>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="panel">
               <div className="row-head">

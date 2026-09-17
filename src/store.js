@@ -356,6 +356,41 @@ export function inRange(iso, start, end) {
   return t >= start.getTime() && t <= end.getTime();
 }
 
+export function answerValue(survey, id) {
+  const a = (survey.answers || []).find(x => x.id === id);
+  if (!a || a.value == null) return '';
+  if (Array.isArray(a.value)) return a.value.filter(Boolean).join(', ');
+  if (typeof a.value === 'object') {
+    const c = a.value;
+    return [c.order && 'Order ' + c.order, c.phone && ((c.code || '') + ' ' + c.phone).trim()]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  return String(a.value).trim();
+}
+
+export function commentDetails(survey) {
+  const food = answerValue(survey, 'q9');
+  const comment = answerValue(survey, 'q4');
+  const raw = answerValue(survey, 'q5') || answerValue(survey, 'q10');
+  let order = '';
+  let phone = '';
+  String(raw).split(' · ').forEach(part => {
+    const bit = part.trim();
+    if (!bit) return;
+    if (bit.toLowerCase().startsWith('order ')) order = bit.slice(6).trim();
+    else phone = bit;
+  });
+  return { food, comment, order, phone };
+}
+
+export function commentSubmissions(list) {
+  return list.filter(s => {
+    const d = commentDetails(s);
+    return d.food || d.comment || d.order || d.phone;
+  });
+}
+
 export function statsFor(list) {
   const total = list.length;
   const terrible = list.filter(s => s.experience === 'Terrible').length;
