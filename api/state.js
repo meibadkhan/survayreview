@@ -1,4 +1,4 @@
-import { kvConfigured, loadState, saveState } from '../server/persist.js';
+import { kvConfigured, loadState, mergeAndSave } from '../server/persist.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -25,14 +25,6 @@ function readBody(req) {
   });
 }
 
-function mergeSurveys(a = [], b = []) {
-  const map = new Map();
-  [...a, ...b].forEach(s => {
-    if (s?.id) map.set(s.id, s);
-  });
-  return [...map.values()].sort((x, y) => String(y.at).localeCompare(String(x.at)));
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS');
@@ -46,24 +38,18 @@ export default async function handler(req, res) {
     }
 
     const body = await readBody(req);
-    const state = await loadState();
 
     if (req.method === 'POST' && body.survey) {
-      state.surveys = mergeSurveys([body.survey], state.surveys);
-      const saved = await saveState(state);
-      return send(res, 200, { ok: true, ...saved });
+      const { next, saved } = await mergeAndSave({
+        surveys: [body.survey],
+        updatedAt: body.survey.at,
+      });
+      return send(res, 200, { ok: true, ...next, ...saved });
     }
 
     if (req.method === 'PUT' || req.method === 'POST') {
-      const next = {
-        users: Array.isArray(body.users) ? body.users : state.users,
-        branches: Array.isArray(body.branches) ? body.branches : state.branches,
-        surveys: Array.isArray(body.surveys) ? body.surveys : state.surveys,
-        resetAt: body.resetAt || state.resetAt || null,
-        updatedAt: body.updatedAt || new Date().toISOString(),
-      };
-      const saved = await saveState(next);
-      return send(res, 200, { ok: true, ...saved });
+      const { next, saved } = await mergeAndSave(body);
+      return send(res, 200, { ok: true, ...next, ...saved });
     }
 
     return send(res, 405, { error: 'Method not allowed' });

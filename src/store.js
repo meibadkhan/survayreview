@@ -7,6 +7,7 @@ const K = {
   session: 'gm_session',
   resetAt: 'gm_resetAt',
   updatedAt: 'gm_updatedAt',
+  removed: 'gm_removed',
 };
 
 export const SMILE = {
@@ -34,6 +35,10 @@ function read(key, fallback) {
   }
 }
 
+function emptyRemoved() {
+  return { users: {}, branches: {}, surveys: {} };
+}
+
 function snapshot() {
   return {
     users: read(K.users, []),
@@ -41,7 +46,18 @@ function snapshot() {
     surveys: read(K.surveys, []),
     resetAt: read(K.resetAt, null),
     updatedAt: read(K.updatedAt, null),
+    removed: read(K.removed, emptyRemoved()),
   };
+}
+
+function rememberRemoved(kind, id) {
+  const removed = read(K.removed, emptyRemoved());
+  removed[kind] = { ...(removed[kind] || {}), [id]: new Date().toISOString() };
+  localStorage.setItem(K.removed, JSON.stringify(removed));
+}
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
 function coreState(data) {
@@ -78,6 +94,7 @@ function applyRemote(data) {
   localStorage.setItem(K.surveys, JSON.stringify(next.surveys));
   if (next.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(next.resetAt));
   if (next.updatedAt) localStorage.setItem(K.updatedAt, JSON.stringify(next.updatedAt));
+  localStorage.setItem(K.removed, JSON.stringify(data.removed || emptyRemoved()));
   shared = !!data.shared;
   listeners.forEach(fn => fn());
 }
@@ -122,8 +139,10 @@ async function runPersist() {
     }
     const json = await res.json();
     shared = !!json.shared;
-    if (syncRev === rev) pendingSave = false;
-    else await runPersist();
+    if (syncRev === rev) {
+      pendingSave = false;
+      if (Array.isArray(json.users)) applyRemote(json);
+    } else await runPersist();
   } catch {
     shared = false;
     queuePersist();
@@ -274,6 +293,7 @@ export function createUser({ username, password, branchIds }) {
     password: pass,
     role: 'user',
     branchIds: branchIds || [],
+    updatedAt: nowIso(),
   };
   write(K.users, [...users, user], true);
   if ((branchIds || []).length) assignBranches(user.id, branchIds);
@@ -282,10 +302,14 @@ export function createUser({ username, password, branchIds }) {
 
 export function assignBranches(userId, branchIds) {
   const unique = [...new Set(branchIds || [])];
+  const at = nowIso();
   write(K.users, getUsers().map(u => {
-    if (isSuper(u)) return { ...u, branchIds: [] };
-    if (u.id === userId) return { ...u, branchIds: unique };
-    return { ...u, branchIds: (u.branchIds || []).filter(id => !unique.includes(id)) };
+    let next = u;
+    if (isSuper(u)) next = { ...u, branchIds: [] };
+    else if (u.id === userId) next = { ...u, branchIds: unique };
+    else next = { ...u, branchIds: (u.branchIds || []).filter(id => !unique.includes(id)) };
+    if (JSON.stringify(next.branchIds || []) === JSON.stringify(u.branchIds || [])) return u;
+    return { ...next, updatedAt: at };
   }), true);
 }
 
@@ -316,7 +340,7 @@ export function resetPassword(id) {
   const target = users.find(u => u.id === id);
   if (!target || isSuper(target)) return { error: 'Cannot reset this account' };
   const password = tempPassword();
-  write(K.users, users.map(u => (u.id === id ? { ...u, password } : u)));
+  write(K.users, users.map(u => (u.id === id ? { ...u, password, updatedAt: nowIso() } : u)));
   return { password, username: target.username };
 }
 
@@ -325,6 +349,7 @@ export function deleteUser(id) {
   const target = users.find(u => u.id === id);
   if (!target) return { error: 'User not found' };
   if (isSuper(target)) return { error: 'The super admin account cannot be deleted' };
+  rememberRemoved('users', id);
   write(K.users, users.filter(u => u.id !== id), true);
   const sessionId = read(K.session, null);
   if (sessionId === id) localStorage.removeItem(K.session);
@@ -339,17 +364,20 @@ export function createBranch(name) {
   if (branches.some(b => b.name.toLowerCase() === label.toLowerCase())) {
     return { error: 'That branch already exists' };
   }
-  const branch = { id: uid('br'), name: label };
+  const branch = { id: uid('br'), name: label, updatedAt: nowIso() };
   write(K.branches, [...branches, branch], true);
   return { branch };
 }
 
 export function deleteBranch(id) {
+  rememberRemoved('branches', id);
   write(K.branches, getBranches().filter(b => b.id !== id), true);
-  write(K.users, getUsers().map(u => ({
-    ...u,
-    branchIds: (u.branchIds || []).filter(x => x !== id),
-  })), true);
+  const at = nowIso();
+  write(K.users, getUsers().map(u => {
+    const branchIds = (u.branchIds || []).filter(x => x !== id);
+    if (branchIds.length === (u.branchIds || []).length) return u;
+    return { ...u, branchIds, updatedAt: at };
+  }), true);
   return { ok: true };
 }
 
@@ -368,6 +396,7 @@ export function clearAllData(actor) {
   localStorage.setItem(K.branches, JSON.stringify([]));
   localStorage.setItem(K.surveys, JSON.stringify([]));
   localStorage.setItem(K.resetAt, JSON.stringify(new Date().toISOString()));
+  localStorage.setItem(K.removed, JSON.stringify(emptyRemoved()));
   localStorage.setItem(K.session, JSON.stringify(keep.id));
   listeners.forEach(fn => fn());
   clearTimeout(persistTimer);
@@ -389,6 +418,7 @@ export function saveSurvey({ answers, branchId }) {
   const survey = {
     id: uid('sbm'),
     at: new Date().toISOString(),
+    updatedAt: nowIso(),
     branchId: branch ? branch.id : null,
     branchName: branch ? branch.name : 'Unassigned',
     experience,
