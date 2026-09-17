@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import {
   assignBranches,
   createBranch,
@@ -12,6 +13,74 @@ import {
 
 function surveyLink(branchId) {
   return `${window.location.origin}/?branch=${branchId}`;
+}
+
+function fileSafe(name) {
+  return String(name || 'branch').replace(/[^\w.-]+/g, '-').replace(/-+/g, '-');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function BranchQr({ url, name }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    QRCode.toCanvas(canvas, url, {
+      width: 168,
+      margin: 1,
+      color: { dark: '#111827', light: '#ffffff' },
+    }).catch(() => {});
+  }, [url]);
+
+  function png() {
+    return canvasRef.current?.toDataURL('image/png') || '';
+  }
+
+  function downloadQr() {
+    const src = png();
+    if (!src) return;
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = `${fileSafe(name)}-survey-qr.png`;
+    a.click();
+  }
+
+  function printQr() {
+    const src = png();
+    if (!src) return;
+    const w = window.open('', '_blank', 'width=480,height=680');
+    if (!w) return;
+    w.document.write(`<!doctype html><title>${escapeHtml(name)} survey QR</title>
+      <body style="font-family:system-ui,sans-serif;text-align:center;padding:32px;color:#111827">
+        <p style="letter-spacing:.08em;text-transform:uppercase;font-size:12px;color:#6b7280;margin:0 0 8px">Guest Matrix</p>
+        <h1 style="margin:0 0 8px;font-size:28px">${escapeHtml(name)}</h1>
+        <p style="margin:0 0 20px;color:#4b5563">Scan to open this branch survey</p>
+        <img src="${src}" width="280" height="280" alt="${escapeHtml(name)} survey QR" />
+        <p style="word-break:break-all;font-size:12px;color:#6b7280;margin-top:16px">${escapeHtml(url)}</p>
+      </body>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
+  return (
+    <div className="qr-row">
+      <canvas ref={canvasRef} width={168} height={168} aria-label={`${name} survey QR code`} />
+      <div className="qr-actions">
+        <p className="muted">Guests scan this code to open the {name} survey.</p>
+        <button type="button" className="ghost-btn" onClick={downloadQr}>Download QR</button>
+        <button type="button" className="ghost-btn" onClick={printQr}>Print QR</button>
+      </div>
+    </div>
+  );
 }
 
 function BranchPicks({ branches, selectedIds, onToggle }) {
@@ -115,7 +184,7 @@ export default function AdminPanel({ user, onLogout }) {
           <>
             <form className="panel" onSubmit={addBranch}>
               <h2>Add restaurant branch</h2>
-              <p className="panel-sub">Add locations such as HBK1, HBK2, HBK3. Then create a user and tap branches one by one to assign them.</p>
+              <p className="panel-sub">Add locations such as HBK1, HBK2, HBK3. Each branch gets its own survey link and QR code. Create QRs from your live site so phones open the public URL, not localhost.</p>
               <label className="field">
                 <span>Branch name</span>
                 <input value={branchName} onChange={e => setBranchName(e.target.value)} placeholder="HBK1" />
@@ -142,6 +211,7 @@ export default function AdminPanel({ user, onLogout }) {
                     <code>{surveyLink(b.id)}</code>
                     <button className="ghost-btn" onClick={() => copyLink(b.id)}>{copied === b.id ? 'Copied' : 'Copy survey link'}</button>
                   </div>
+                  <BranchQr url={surveyLink(b.id)} name={b.name} />
                 </div>
               );
             })}

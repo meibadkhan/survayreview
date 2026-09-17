@@ -151,6 +151,19 @@ textarea { min-height: 100px; max-height: 28vh; resize: none; margin-bottom: 12p
   font-size: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
   padding: 8px; overflow-wrap: anywhere;
 }
+.qr-row {
+  display: flex; align-items: center; gap: 14px; margin-top: 12px;
+  padding-top: 12px; border-top: 1px solid #f3f4f6;
+}
+.qr-row canvas {
+  width: 168px; height: 168px; border-radius: 12px; background: #fff;
+  border: 1px solid #e5e7eb; flex: 0 0 auto;
+}
+.qr-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.qr-actions .muted { width: 100%; margin: 0 0 4px; }
+@media (max-width: 600px) {
+  .qr-row { flex-direction: column; align-items: flex-start; }
+}
 .response { border-top: 1px solid #f3f4f6; padding: 10px 0; font-size: 13px; }
 .response:first-of-type { border-top: 0; }
 .signed-as, .login-hint { color: #6b7280; font-size: 12px; text-align: center; margin-top: 8px; }
