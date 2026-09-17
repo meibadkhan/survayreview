@@ -20,6 +20,7 @@ export const SMILE = {
 const listeners = new Set();
 let shared = false;
 let mutating = 0;
+let lastError = '';
 
 const cache = {
   users: [],
@@ -82,6 +83,7 @@ function applyState(data) {
   cache.resetAt = data.resetAt || null;
   cache.updatedAt = data.updatedAt || null;
   shared = data.shared !== false;
+  lastError = '';
   notify();
 }
 
@@ -104,9 +106,11 @@ async function mutate(action, extra = {}) {
   mutating += 1;
   try {
     const json = await callApi({ action, ...extra });
+    lastError = '';
     applyState(json);
     return json;
   } catch (err) {
+    lastError = err?.message || 'Save failed';
     await pullServer().catch(() => {});
     throw err;
   } finally {
@@ -144,9 +148,11 @@ export async function pullServer() {
       return true;
     }
     applyState({ ...data, shared: true });
+    lastError = '';
     return true;
-  } catch {
+  } catch (err) {
     shared = false;
+    lastError = err?.message || 'Could not reach the database';
     notify();
     return false;
   }
@@ -154,6 +160,10 @@ export async function pullServer() {
 
 export function isShared() {
   return shared;
+}
+
+export function storeError() {
+  return lastError;
 }
 
 export function subscribe(fn) {
@@ -506,5 +516,6 @@ export function useData() {
     surveys: getSurveys(),
     session: getSession(),
     shared: isShared(),
+    error: storeError(),
   };
 }

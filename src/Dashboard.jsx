@@ -84,7 +84,7 @@ function PinIcon() {
 }
 
 export default function Dashboard({ user, onLogout }) {
-  useData();
+  const { error: dbError } = useData();
   const mine = branchesForUser(user);
   const mySurveys = surveysForUser(user);
   const [branchId, setBranchId] = useState('all');
@@ -156,6 +156,8 @@ export default function Dashboard({ user, onLogout }) {
             <button className="ghost-btn" onClick={onLogout}>Log out</button>
           </div>
         </header>
+
+        {dbError && <p className="form-error">{dbError}</p>}
 
         {!mine.length ? (
           <div className="panel">

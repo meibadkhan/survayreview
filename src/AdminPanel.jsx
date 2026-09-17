@@ -105,7 +105,7 @@ function BranchPicks({ branches, selectedIds, onToggle }) {
 }
 
 export default function AdminPanel({ user, onLogout }) {
-  const { users, branches, surveys } = useData();
+  const { users, branches, surveys, error: dbError } = useData();
   const [tab, setTab] = useState('branches');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -187,7 +187,7 @@ export default function AdminPanel({ user, onLogout }) {
           ))}
         </div>
 
-        {(notice || error) && <p className={error ? 'form-error' : 'form-ok'}>{error || notice}</p>}
+        {(dbError || notice || error) && <p className={error || dbError ? 'form-error' : 'form-ok'}>{error || dbError || notice}</p>}
 
         {tab === 'branches' && (
           <>

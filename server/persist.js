@@ -34,7 +34,7 @@ function loadLocalEnv() {
 loadLocalEnv();
 
 function mongoUri() {
-  return process.env.MONGODB_URI || '';
+  return process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL || '';
 }
 
 export function mongoConfigured() {
@@ -91,7 +91,11 @@ async function getDb() {
   if (!uri) throw httpError(500, 'MongoDB is not configured');
   const cache = globalCache.__gmMongo;
   if (!cache.promise) {
-    cache.client = new MongoClient(uri, { maxPoolSize: 5 });
+    cache.client = new MongoClient(uri, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+    });
     cache.promise = cache.client.connect();
   }
   const client = await cache.promise;
@@ -135,7 +139,7 @@ async function touchMeta(cols, extra = {}) {
   return updatedAt;
 }
 
-export async function loadState() {
+async function loadMongoState() {
   const cols = await collections();
   await ensureSeed(cols);
   const [users, branches, surveys, meta] = await Promise.all([
@@ -178,7 +182,7 @@ async function createUser(user) {
   };
   await cols.users.insertOne(doc);
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function updateUser(id, patch = {}) {
@@ -194,7 +198,7 @@ async function updateUser(id, patch = {}) {
   }
   await cols.users.updateOne({ id }, { $set: next });
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function deleteUser(id) {
@@ -206,7 +210,7 @@ async function deleteUser(id) {
   }
   await cols.users.deleteOne({ id });
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function createBranch(branch) {
@@ -224,7 +228,7 @@ async function createBranch(branch) {
     updatedAt: branch.updatedAt || nowIso(),
   });
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function deleteBranch(id) {
@@ -232,7 +236,7 @@ async function deleteBranch(id) {
   await cols.branches.deleteOne({ id });
   await cols.users.updateMany({}, { $pull: { branchIds: id } });
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function assignBranches(userId, branchIds) {
@@ -252,7 +256,7 @@ async function assignBranches(userId, branchIds) {
     { $set: { branchIds: [], updatedAt: at } },
   );
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function resetPassword(id, password) {
@@ -264,7 +268,7 @@ async function resetPassword(id, password) {
   if (!password) throw httpError(400, 'Password is required');
   await cols.users.updateOne({ id }, { $set: { password, updatedAt: nowIso() } });
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function saveSurvey(survey) {
@@ -277,7 +281,7 @@ async function saveSurvey(survey) {
     { upsert: true },
   );
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
 async function wipe(keep) {
@@ -302,7 +306,7 @@ async function wipe(keep) {
     { $set: { resetAt, updatedAt: resetAt } },
     { upsert: true },
   );
-  return loadState();
+  return loadMongoState();
 }
 
 async function migrate(snapshot) {
@@ -313,7 +317,7 @@ async function migrate(snapshot) {
     cols.surveys.countDocuments(),
     cols.users.countDocuments(),
   ]);
-  if (branchCount || surveyCount || userCount > 1) return loadState();
+  if (branchCount || surveyCount || userCount > 1) return loadMongoState();
   const users = Array.isArray(snapshot?.users) ? snapshot.users : [];
   const branches = Array.isArray(snapshot?.branches) ? snapshot.branches : [];
   const surveys = Array.isArray(snapshot?.surveys) ? snapshot.surveys : [];
@@ -333,10 +337,10 @@ async function migrate(snapshot) {
     )));
   }
   await touchMeta(cols);
-  return loadState();
+  return loadMongoState();
 }
 
-export async function handleAction(body = {}) {
+async function handleMongoAction(body = {}) {
   const action = body.action || (body.survey ? 'saveSurvey' : '');
   if (action === 'saveSurvey') return saveSurvey(body.survey);
   if (action === 'createUser') return createUser(body.user);
@@ -349,4 +353,234 @@ export async function handleAction(body = {}) {
   if (action === 'wipe') return wipe(body.keep);
   if (action === 'migrate') return migrate(body);
   throw httpError(400, 'Unknown action');
+}
+
+const KEY = 'gm_state';
+
+export function kvConfigured() {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
+export function isSharedStore() {
+  return mongoConfigured() || kvConfigured() || !process.env.VERCEL;
+}
+
+async function kvCommand(command) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(command),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function filePath() {
+  const dir = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), '.data');
+  return path.join(dir, 'state.json');
+}
+
+function readFileState() {
+  try {
+    return JSON.parse(fs.readFileSync(filePath(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeFileState(state) {
+  const file = filePath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(state));
+}
+
+function stamp(item) {
+  return Date.parse(item?.updatedAt || item?.at || 0) || 0;
+}
+
+function mergeList(a = [], b = []) {
+  const map = new Map();
+  [...a, ...b].forEach(item => {
+    if (!item?.id) return;
+    const prev = map.get(item.id);
+    if (!prev || stamp(item) >= stamp(prev)) map.set(item.id, item);
+  });
+  return [...map.values()];
+}
+
+function sortSurveys(list) {
+  return [...(list || [])].sort((x, y) => String(y.at || '').localeCompare(String(x.at || '')));
+}
+
+function mergeState(current, incoming) {
+  if (!incoming) return current;
+  const incomingReset = incoming.resetAt || null;
+  const currentReset = current.resetAt || null;
+  if (incomingReset && (!currentReset || incomingReset > currentReset)) {
+    return {
+      users: incoming.users || [],
+      branches: incoming.branches || [],
+      surveys: incoming.surveys || [],
+      resetAt: incomingReset,
+      updatedAt: incoming.updatedAt || nowIso(),
+    };
+  }
+  return {
+    users: mergeList(current.users, incoming.users),
+    branches: mergeList(current.branches, incoming.branches),
+    surveys: sortSurveys(mergeList(current.surveys, incoming.surveys)),
+    resetAt: currentReset || incomingReset,
+    updatedAt: incoming.updatedAt || current.updatedAt || nowIso(),
+  };
+}
+
+async function loadBlobState() {
+  if (kvConfigured()) {
+    const json = await kvCommand(['GET', KEY]);
+    const raw = json?.result;
+    if (!raw) return emptyState();
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  }
+  return readFileState() || emptyState();
+}
+
+async function saveBlobState(state) {
+  const next = {
+    users: state.users || [],
+    branches: state.branches || [],
+    surveys: state.surveys || [],
+    resetAt: state.resetAt || null,
+    updatedAt: state.updatedAt || nowIso(),
+  };
+  if (kvConfigured()) {
+    await kvCommand(['SET', KEY, JSON.stringify(next)]);
+    return next;
+  }
+  writeFileState(next);
+  return next;
+}
+
+async function handleBlobAction(body = {}) {
+  const action = body.action || (body.survey ? 'saveSurvey' : '');
+  let state = await loadBlobState();
+  const at = nowIso();
+  if (action === 'saveSurvey') {
+    if (!body.survey?.id) throw httpError(400, 'Survey is required');
+    state.surveys = sortSurveys(mergeList(state.surveys, [body.survey]));
+  } else if (action === 'createUser') {
+    const user = body.user;
+    if (!user?.id || !user?.username || !user?.password) {
+      throw httpError(400, 'Username and password are required');
+    }
+    if (state.users.some(u => u.username.toLowerCase() === String(user.username).toLowerCase())) {
+      throw httpError(409, 'That username already exists');
+    }
+    state.users = [...state.users, { ...user, role: 'user', updatedAt: user.updatedAt || at }];
+  } else if (action === 'updateUser') {
+    if (!state.users.some(u => u.id === body.id)) throw httpError(404, 'User not found');
+    state.users = state.users.map(u => (u.id === body.id ? { ...u, ...(body.patch || {}), updatedAt: at } : u));
+  } else if (action === 'deleteUser') {
+    const current = state.users.find(u => u.id === body.id);
+    if (!current) throw httpError(404, 'User not found');
+    if (current.role === 'superadmin' || current.role === 'admin') {
+      throw httpError(400, 'The super admin account cannot be deleted');
+    }
+    state.users = state.users.filter(u => u.id !== body.id);
+  } else if (action === 'createBranch') {
+    const branch = body.branch;
+    const name = String(branch?.name || '').trim();
+    if (!branch?.id || !name) throw httpError(400, 'Branch name is required');
+    if (state.branches.some(b => b.name.toLowerCase() === name.toLowerCase())) {
+      throw httpError(409, 'That branch already exists');
+    }
+    state.branches = [...state.branches, { ...branch, name, updatedAt: branch.updatedAt || at }];
+  } else if (action === 'deleteBranch') {
+    state.branches = state.branches.filter(b => b.id !== body.id);
+    state.users = state.users.map(u => ({
+      ...u,
+      branchIds: (u.branchIds || []).filter(x => x !== body.id),
+      updatedAt: at,
+    }));
+  } else if (action === 'assignBranches') {
+    const unique = [...new Set(body.branchIds || [])];
+    state.users = state.users.map(u => {
+      let next = u;
+      if (u.role === 'superadmin' || u.role === 'admin') next = { ...u, branchIds: [] };
+      else if (u.id === body.userId) next = { ...u, branchIds: unique };
+      else next = { ...u, branchIds: (u.branchIds || []).filter(id => !unique.includes(id)) };
+      if (JSON.stringify(next.branchIds || []) === JSON.stringify(u.branchIds || [])) return u;
+      return { ...next, updatedAt: at };
+    });
+  } else if (action === 'resetPassword') {
+    const current = state.users.find(u => u.id === body.id);
+    if (!current || current.role === 'superadmin' || current.role === 'admin') {
+      throw httpError(400, 'Cannot reset this account');
+    }
+    if (!body.password) throw httpError(400, 'Password is required');
+    state.users = state.users.map(u => (u.id === body.id ? { ...u, password: body.password, updatedAt: at } : u));
+  } else if (action === 'wipe') {
+    if (!body.keep?.id) throw httpError(400, 'Not allowed');
+    state = {
+      users: [{ ...body.keep, role: 'superadmin', branchIds: [], updatedAt: at }],
+      branches: [],
+      surveys: [],
+      resetAt: at,
+      updatedAt: at,
+    };
+  } else if (action === 'migrate') {
+    state = mergeState(state, body);
+  } else {
+    throw httpError(400, 'Unknown action');
+  }
+  state.updatedAt = state.updatedAt || at;
+  return saveBlobState(state);
+}
+
+async function upsertMongoSnapshot(incoming) {
+  if (!incoming) return loadMongoState();
+  const cols = await collections();
+  await ensureSeed(cols);
+  const incomingReset = incoming.resetAt || null;
+  const meta = await cols.meta.findOne({ _id: META_ID });
+  if (
+    incomingReset
+    && (!meta?.resetAt || incomingReset > meta.resetAt)
+    && !(incoming.branches || []).length
+    && !(incoming.surveys || []).length
+  ) {
+    return wipe(incoming.users?.[0] || emptyState().users[0]);
+  }
+  await Promise.all((incoming.users || []).filter(u => u?.id).map(user => (
+    cols.users.updateOne({ id: user.id }, { $set: { ...user, updatedAt: user.updatedAt || nowIso() } }, { upsert: true })
+  )));
+  await Promise.all((incoming.branches || []).filter(b => b?.id).map(branch => (
+    cols.branches.updateOne({ id: branch.id }, { $set: { ...branch, updatedAt: branch.updatedAt || nowIso() } }, { upsert: true })
+  )));
+  await Promise.all((incoming.surveys || []).filter(s => s?.id).map(survey => (
+    cols.surveys.updateOne({ id: survey.id }, { $set: { ...survey, updatedAt: survey.updatedAt || survey.at || nowIso() } }, { upsert: true })
+  )));
+  await touchMeta(cols);
+  return loadMongoState();
+}
+
+export async function loadState() {
+  if (mongoConfigured()) return loadMongoState();
+  return loadBlobState();
+}
+
+export async function handleAction(body = {}) {
+  if (mongoConfigured()) return handleMongoAction(body);
+  return handleBlobAction(body);
+}
+
+export async function applySnapshot(incoming) {
+  if (mongoConfigured()) return upsertMongoSnapshot(incoming);
+  const next = mergeState(await loadBlobState(), incoming);
+  return saveBlobState(next);
 }

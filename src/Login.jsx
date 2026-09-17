@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { isSuper, login } from './store';
+import { isSuper, login, useData } from './store';
 
 export default function Login() {
+  const { error: dbError } = useData();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -37,7 +38,7 @@ export default function Login() {
             <span>Password</span>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
           </label>
-          {error && <p className="form-error">{error}</p>}
+          {(error || dbError) && <p className="form-error">{error || dbError}</p>}
           <button className="btn-primary" type="submit">Sign in</button>
         </form>
       </div>
