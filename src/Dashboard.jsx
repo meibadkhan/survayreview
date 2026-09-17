@@ -73,7 +73,7 @@ function PinIcon() {
 }
 
 export default function Dashboard({ user, onLogout }) {
-  useData();
+  const { shared } = useData();
   const mine = branchesForUser(user);
   const mySurveys = surveysForUser(user);
   const [branchId, setBranchId] = useState('all');
@@ -134,7 +134,7 @@ export default function Dashboard({ user, onLogout }) {
       <div className="portal-inner dash">
         <header className="portal-top">
           <div>
-            <p className="dash-kicker">Default Dashboard View</p>
+            <p className="dash-kicker">{shared ? 'Live from customer phones' : 'Default Dashboard View'}</p>
             <h1>{greeting(user.username)}</h1>
           </div>
           <div className="portal-actions">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import S from './survey.json';
 import { saveSurvey, useData } from './store';
 
@@ -67,7 +67,11 @@ export default function Survey() {
   const qs = visible(answers);
   const branch = branches.find(b => b.id === branchId) || null;
   const activeBranchId = branch?.id || '';
-  const picking = !branch && !done;
+
+  useEffect(() => {
+    if (!branchId) window.location.replace('/login');
+    else if (branches.length && !branch) window.location.replace('/login');
+  }, [branch, branchId, branches.length]);
 
   function pick(q, opt) {
     setAnswers(a => {
@@ -108,16 +112,8 @@ export default function Survey() {
   }
 
   let inner;
-  if (picking) {
-    inner = (
-      <>
-        <div className="body">
-          <p className="sub">{S.welcomeSub}</p>
-          <h1>Open this survey from your location link</h1>
-          <p className="sub">Each branch has its own survey URL. Ask staff for the correct link.</p>
-        </div>
-      </>
-    );
+  if (!branch) {
+    inner = null;
   } else if (step === 0) {
     inner = (
       <>
@@ -203,17 +199,12 @@ export default function Survey() {
   }
 
   return (
-    <div className={`page-survey${step === 0 || picking ? ' start' : ''}`}>
-      {(step === 0 || picking) && <Logo className="out" />}
+    <div className={`page-survey${step === 0 ? ' start' : ''}`}>
+      {step === 0 && <Logo className="out" />}
       <div className="shell">
         <div className="card">{inner}</div>
       </div>
-      {(step === 0 || picking) && (
-        <>
-          <p className="visit">Thank You For Visiting Us!</p>
-          <a className="staff-link" href="/login">Staff login</a>
-        </>
-      )}
+      {step === 0 && <p className="visit">Thank You For Visiting Us!</p>}
     </div>
   );
 }

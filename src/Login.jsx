@@ -21,7 +21,7 @@ export default function Login() {
       <div className="login-wrap">
         <p className="dash-kicker">Guest Matrix</p>
         <h1 className="login-title">Staff login</h1>
-        <p className="login-sub">Super admin creates branches and users. Each user only sees surveys from the branches assigned to them.</p>
+        <p className="login-sub">Super admin creates branches and users. Guest reviews are saved and shown to the assigned branch user. For Vercel testing, add KV so every phone shares the same data.</p>
         <form className="panel" onSubmit={submit}>
           <label className="field">
             <span>Username</span>
@@ -35,7 +35,6 @@ export default function Login() {
           <button className="btn-primary" type="submit">Sign in</button>
         </form>
         <p className="login-hint">Super admin: <b>superadmin</b> / <b>admin123</b></p>
-        <a className="text-link" href="/">Back to guest survey</a>
       </div>
     </div>
   );

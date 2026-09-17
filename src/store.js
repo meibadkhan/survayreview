@@ -16,6 +16,8 @@ export const SMILE = {
 };
 
 const listeners = new Set();
+let shared = false;
+let persistTimer = 0;
 
 function read(key, fallback) {
   try {
@@ -27,9 +29,75 @@ function read(key, fallback) {
   }
 }
 
+function snapshot() {
+  return {
+    users: read(K.users, []),
+    branches: read(K.branches, []),
+    surveys: read(K.surveys, []),
+  };
+}
+
+function applyRemote(data) {
+  if (!data || !Array.isArray(data.users)) return;
+  localStorage.setItem(K.users, JSON.stringify(data.users));
+  localStorage.setItem(K.branches, JSON.stringify(data.branches || []));
+  localStorage.setItem(K.surveys, JSON.stringify(data.surveys || []));
+  shared = !!data.shared;
+  listeners.forEach(fn => fn());
+}
+
 function write(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
   listeners.forEach(fn => fn());
+  queuePersist();
+}
+
+function queuePersist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistFull().catch(() => {});
+  }, 250);
+}
+
+async function persistFull() {
+  try {
+    const res = await fetch('/api/state', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot()),
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    shared = !!json.shared;
+    listeners.forEach(fn => fn());
+  } catch {
+    shared = false;
+  }
+}
+
+export async function pullServer() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) return false;
+    const data = await res.json();
+    shared = !!data.shared;
+    const local = snapshot();
+    const remoteEmpty = (data.users || []).length <= 1 && !(data.branches || []).length && !(data.surveys || []).length;
+    const localHas = local.users.length > 1 || local.branches.length || local.surveys.length;
+    if (remoteEmpty && localHas) {
+      await persistFull();
+      return true;
+    }
+    applyRemote({ ...data, shared });
+    return true;
+  } catch {
+    shared = false;
+    return false;
+  }
+}
+
+export function isShared() {
+  return shared;
 }
 
 export function subscribe(fn) {
@@ -48,13 +116,13 @@ export function isSuper(user) {
 export function seed() {
   const users = read(K.users, null);
   if (users == null) {
-    write(K.users, [{
+    localStorage.setItem(K.users, JSON.stringify([{
       id: 'usr_superadmin',
       username: 'superadmin',
       password: 'admin123',
       role: 'superadmin',
       branchIds: [],
-    }]);
+    }]));
   } else {
     const next = users.map(u => {
       if (u.role === 'admin' || u.username === 'admin') {
@@ -62,13 +130,18 @@ export function seed() {
       }
       return u;
     });
-    if (JSON.stringify(next) !== JSON.stringify(users)) write(K.users, next);
+    if (JSON.stringify(next) !== JSON.stringify(users)) {
+      localStorage.setItem(K.users, JSON.stringify(next));
+    }
   }
-  if (read(K.branches, null) == null) write(K.branches, []);
+  if (read(K.branches, null) == null) localStorage.setItem(K.branches, '[]');
   if (read(K.surveys, null) == null) {
     const old = read('surveys', []);
-    write(K.surveys, Array.isArray(old) ? old : []);
+    localStorage.setItem(K.surveys, JSON.stringify(Array.isArray(old) ? old : []));
   }
+  pullServer().then(ok => {
+    if (!ok) persistFull().catch(() => {});
+  });
 }
 
 export function getUsers() {
@@ -225,6 +298,15 @@ export function saveSurvey({ answers, branchId }) {
     answers,
   };
   write(K.surveys, [survey, ...getSurveys()]);
+  fetch('/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ survey }),
+  }).then(async res => {
+    if (!res.ok) return;
+    const json = await res.json();
+    shared = !!json.shared;
+  }).catch(() => {});
   return survey;
 }
 
@@ -292,10 +374,16 @@ export function statsFor(list) {
 export function useData() {
   const [, bump] = useState(0);
   useEffect(() => subscribe(() => bump(n => n + 1)), []);
+  useEffect(() => {
+    pullServer();
+    const t = setInterval(pullServer, 8000);
+    return () => clearInterval(t);
+  }, []);
   return {
     users: getUsers(),
     branches: getBranches(),
     surveys: getSurveys(),
     session: getSession(),
+    shared: isShared(),
   };
 }

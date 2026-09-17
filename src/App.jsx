@@ -9,7 +9,8 @@ seed();
 
 function pathOf() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/login') return 'login';
+  const branch = new URLSearchParams(window.location.search).get('branch');
+  if (path === '/login' || (path === '/' && !branch)) return 'login';
   if (path === '/admin') return 'admin';
   if (path === '/dashboard') return 'dashboard';
   return 'survey';

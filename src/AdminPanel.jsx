@@ -37,7 +37,7 @@ function BranchPicks({ branches, selectedIds, onToggle }) {
 }
 
 export default function AdminPanel({ user, onLogout }) {
-  const { users, branches, surveys } = useData();
+  const { users, branches, surveys, shared } = useData();
   const [tab, setTab] = useState('branches');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -204,7 +204,7 @@ export default function AdminPanel({ user, onLogout }) {
           </>
         )}
 
-        <p className="signed-as">Signed in as super admin {user.username}</p>
+        <p className="signed-as">Signed in as super admin {user.username} · {shared ? 'Live save on for every device' : 'This device only until Vercel KV is added'}</p>
       </div>
     </div>
   );
