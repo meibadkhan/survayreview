@@ -14,12 +14,33 @@ function surveyLink(branchId) {
   return `${window.location.origin}/?branch=${branchId}`;
 }
 
+function BranchPicks({ branches, selectedIds, onToggle }) {
+  return (
+    <div className="checks">
+      {branches.map(b => {
+        const on = selectedIds.includes(b.id);
+        const owner = ownerOfBranch(b.id);
+        const taken = owner && !on;
+        return (
+          <button
+            type="button"
+            key={b.id}
+            className={`check${on ? ' on' : ''}`}
+            onClick={() => onToggle(b.id, !on)}
+          >
+            {b.name}{taken ? ` · ${owner.username}` : ''}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminPanel({ user, onLogout }) {
   const { users, branches, surveys } = useData();
   const [tab, setTab] = useState('branches');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [userBranches, setUserBranches] = useState([]);
   const [branchName, setBranchName] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -32,19 +53,13 @@ export default function AdminPanel({ user, onLogout }) {
     setNotice(isError ? '' : msg);
   }
 
-  function toggleBranch(id) {
-    setUserBranches(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
-  }
-
   function addUser(e) {
     e.preventDefault();
-    if (!userBranches.length) return flash('Assign at least one branch to this user', true);
-    const res = createUser({ username, password, branchIds: userBranches });
+    const res = createUser({ username, password, branchIds: [] });
     if (res.error) return flash(res.error, true);
     setUsername('');
     setPassword('');
-    setUserBranches([]);
-    flash(`Created ${res.user.username} · password ${res.user.password}. Surveys from ${userBranches.length} branch${userBranches.length === 1 ? '' : 'es'} go only to this user.`);
+    flash(`Created ${res.user.username}. Now tap branches one by one below to assign them.`);
   }
 
   function addBranch(e) {
@@ -100,7 +115,7 @@ export default function AdminPanel({ user, onLogout }) {
           <>
             <form className="panel" onSubmit={addBranch}>
               <h2>Add restaurant branch</h2>
-              <p className="panel-sub">Add locations such as HBK1, HBK2, HBK3. Then assign one or more of them to a user. Guest surveys from a branch go only to that user.</p>
+              <p className="panel-sub">Add locations such as HBK1, HBK2, HBK3. Then create a user and tap branches one by one to assign them.</p>
               <label className="field">
                 <span>Branch name</span>
                 <input value={branchName} onChange={e => setBranchName(e.target.value)} placeholder="HBK1" />
@@ -138,32 +153,16 @@ export default function AdminPanel({ user, onLogout }) {
           <>
             <form className="panel" onSubmit={addUser}>
               <h2>Create user</h2>
-              <p className="panel-sub">Assign multiple branches to one user. Example: give ibadkhan HBK1, HBK2 and HBK3. Only ibadkhan will see those surveys on a greeting dashboard.</p>
+              <p className="panel-sub">First create a username and password. After the user is created, tap each branch below one by one to assign it. Selected branches stay highlighted.</p>
               <label className="field">
                 <span>Username</span>
                 <input value={username} onChange={e => setUsername(e.target.value)} placeholder="ibadkhan" />
               </label>
               <label className="field">
                 <span>Password</span>
-                <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave blank to auto-create" />
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter a password" />
               </label>
-              <div className="field">
-                <span>Assign branches (select one or more)</span>
-                {!branches.length && <p className="muted">Add branches first, then come back here.</p>}
-                <div className="checks">
-                  {branches.map(b => {
-                    const owner = ownerOfBranch(b.id);
-                    const taken = owner && !userBranches.includes(b.id);
-                    return (
-                      <label key={b.id} className="check">
-                        <input type="checkbox" checked={userBranches.includes(b.id)} onChange={() => toggleBranch(b.id)} />
-                        {b.name}{taken ? ` · now ${owner.username}` : ''}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <button className="btn-primary" type="submit">Create user and assign branches</button>
+              <button className="btn-primary" type="submit">Create user</button>
             </form>
 
             {staff.map(u => {
@@ -175,7 +174,7 @@ export default function AdminPanel({ user, onLogout }) {
                     <div>
                       <h2>{u.username}</h2>
                       <p className="muted">
-                        {names.length ? names.join(', ') : 'No branches'}
+                        {names.length ? names.join(', ') : 'Tap branches below to assign'}
                         {' · '}
                         {count === 1 ? '1 survey goes only to this user' : `${count} surveys go only to this user`}
                       </p>
@@ -189,23 +188,19 @@ export default function AdminPanel({ user, onLogout }) {
                       <button className="danger-btn" onClick={() => deleteUser(u.id)}>Remove</button>
                     </div>
                   </div>
-                  <div className="checks">
-                    {branches.map(b => (
-                      <label key={b.id} className="check">
-                        <input
-                          type="checkbox"
-                          checked={(u.branchIds || []).includes(b.id)}
-                          onChange={e => setUserBranch(u.id, b.id, e.target.checked)}
-                        />
-                        {b.name}
-                      </label>
-                    ))}
-                  </div>
+                  <p className="panel-sub">Tap a branch to assign or remove it for {u.username}.</p>
+                  {!!branches.length && (
+                    <BranchPicks
+                      branches={branches}
+                      selectedIds={u.branchIds || []}
+                      onToggle={(id, on) => setUserBranch(u.id, id, on)}
+                    />
+                  )}
                   {!branches.length && <p className="muted">No branches yet.</p>}
                 </div>
               );
             })}
-            {!staff.length && <div className="panel"><p className="muted">No users yet. Create a user and assign HBK1, HBK2, HBK3 to them.</p></div>}
+            {!staff.length && <div className="panel"><p className="muted">No users yet. Create a username and password, then assign branches.</p></div>}
           </>
         )}
 

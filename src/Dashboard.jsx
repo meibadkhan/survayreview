@@ -10,6 +10,17 @@ import {
   useData,
 } from './store';
 
+function ymd(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${dt.getFullYear()}-${m}-${day}`;
+}
+
+function monthStart(now = new Date()) {
+  return ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+}
+
 function delta(cur, prev, kind) {
   if (kind === 'points') {
     const d = cur - prev;
@@ -66,8 +77,10 @@ export default function Dashboard({ user, onLogout }) {
   const mine = branchesForUser(user);
   const mySurveys = surveysForUser(user);
   const [branchId, setBranchId] = useState('all');
-  const [preset, setPreset] = useState('month');
-  const range = periodRange(preset);
+  const [preset, setPreset] = useState('custom');
+  const [from, setFrom] = useState(() => monthStart());
+  const [to, setTo] = useState(() => ymd(new Date()));
+  const range = periodRange(preset, new Date(), { from, to });
 
   const visibleIds = useMemo(() => {
     if (branchId === 'all') return mine.map(b => b.id);
@@ -86,9 +99,35 @@ export default function Dashboard({ user, onLogout }) {
   const subDelta = delta(now.total, was.total, 'pct');
   const terribleDelta = delta(now.terrible, was.terrible, 'pct');
   const maxRating = Math.max(1, ...Object.values(now.byRating));
-  const dateLabel = !range.start
-    ? 'All time'
-    : `${range.start.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' })} – ${range.end.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' })}`;
+
+  function applyPreset(next) {
+    setPreset(next);
+    const today = new Date();
+    if (next === 'month') {
+      setFrom(monthStart(today));
+      setTo(ymd(today));
+    } else if (next === '7d') {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6);
+      setFrom(ymd(start));
+      setTo(ymd(today));
+    } else if (next === 'all') {
+      setFrom('');
+      setTo('');
+    } else {
+      setPreset('custom');
+    }
+  }
+
+  function changeFrom(value) {
+    setFrom(value);
+    setPreset(value && to ? 'custom' : 'all');
+  }
+
+  function changeTo(value) {
+    setTo(value);
+    setPreset(from && value ? 'custom' : 'all');
+  }
 
   return (
     <div className="portal">
@@ -110,14 +149,21 @@ export default function Dashboard({ user, onLogout }) {
         ) : (
           <>
             <div className="filters">
-              <label className="filter">
-                <span>{dateLabel}</span>
-                <select value={preset} onChange={e => setPreset(e.target.value)}>
-                  <option value="month">This Month</option>
-                  <option value="7d">Last 7 days</option>
-                  <option value="all">All time</option>
-                </select>
-              </label>
+              <div className="filter dates">
+                <label>
+                  From
+                  <input type="date" value={from} onChange={e => changeFrom(e.target.value)} />
+                </label>
+                <label>
+                  To
+                  <input type="date" value={to} onChange={e => changeTo(e.target.value)} />
+                </label>
+              </div>
+              <div className="date-presets">
+                <button type="button" className={`check${preset === 'month' ? ' on' : ''}`} onClick={() => applyPreset('month')}>This month</button>
+                <button type="button" className={`check${preset === '7d' ? ' on' : ''}`} onClick={() => applyPreset('7d')}>Last 7 days</button>
+                <button type="button" className={`check${preset === 'all' ? ' on' : ''}`} onClick={() => applyPreset('all')}>All time</button>
+              </div>
               <label className="filter">
                 <PinIcon />
                 <select value={branchId} onChange={e => setBranchId(e.target.value)}>
@@ -130,7 +176,7 @@ export default function Dashboard({ user, onLogout }) {
             <div className="kpis">
               <article className="kpi">
                 <div className="kpi-label">Smile Score <SmileIcon /></div>
-                <div className="kpi-value">{now.total ? `${now.smile.toFixed(now.smile % 1 ? 1 : 0)}%` : '—'}</div>
+                <div className="kpi-value">{now.total ? Math.round(now.smile) : '—'}</div>
                 <p className={`kpi-delta ${smileDelta.dir}`}>{smileDelta.dir === 'down' ? '↘' : smileDelta.dir === 'up' ? '↗' : '→'} {smileDelta.text} vs previous period</p>
               </article>
               <article className="kpi">
@@ -145,8 +191,8 @@ export default function Dashboard({ user, onLogout }) {
               </article>
               <article className="kpi">
                 <div className="kpi-label">Positive</div>
-                <div className="kpi-value">{now.total ? `${((now.positive / now.total) * 100).toFixed(0)}%` : '—'}</div>
-                <p className="kpi-delta flat">Excellent + Good share</p>
+                <div className="kpi-value">{now.positive}</div>
+                <p className="kpi-delta flat">Excellent and Good</p>
               </article>
             </div>
 
@@ -155,25 +201,12 @@ export default function Dashboard({ user, onLogout }) {
                 <h2>Smile Score</h2>
                 <span className="target">Target: 95</span>
               </div>
-              <p className="panel-sub">Excellent 100% · Good 90% · Neutral 50% · Bad 30% · Terrible 0%</p>
-              {Object.entries(SMILE).map(([label, value]) => (
+              <p className="panel-sub">Excellent · Good · Neutral · Bad · Terrible</p>
+              {Object.keys(SMILE).map(label => (
                 <div className="bar" key={label}>
-                  <span>{label} · {value}%</span>
+                  <span>{label}</span>
                   <div className="track"><div className={`fill r-${label.toLowerCase()}`} style={{ width: `${(now.byRating[label] / maxRating) * 100}%` }} /></div>
                   <b>{now.byRating[label]}</b>
-                </div>
-              ))}
-            </div>
-
-            <div className="panel">
-              <h2>Submissions from assigned branches</h2>
-              <p className="panel-sub">{now.total} in this period · {mine.map(b => b.name).join(', ')}</p>
-              {!current.length && <p className="muted">No guest surveys yet for these branches.</p>}
-              {current.slice(0, 40).map(s => (
-                <div className="response" key={s.id}>
-                  <b>{s.branchName}</b>
-                  <span className="muted"> · {new Date(s.at).toLocaleString()}</span>
-                  <div>{s.experience || 'No rating'}{s.smile != null ? ` · ${s.smile}%` : ''}</div>
                 </div>
               ))}
             </div>

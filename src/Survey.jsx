@@ -60,16 +60,12 @@ function phoneOk(s, required) {
 
 export default function Survey() {
   const { branches } = useData();
-  const [branchId, setBranchId] = useState(() => {
-    const id = new URLSearchParams(window.location.search).get('branch');
-    if (id) return id;
-    return '';
-  });
+  const [branchId] = useState(() => new URLSearchParams(window.location.search).get('branch') || '');
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(blank);
   const [done, setDone] = useState(null);
   const qs = visible(answers);
-  const branch = branches.find(b => b.id === branchId) || (branches.length === 1 ? branches[0] : null);
+  const branch = branches.find(b => b.id === branchId) || null;
   const activeBranchId = branch?.id || '';
   const picking = !branch && !done;
 
@@ -111,27 +107,14 @@ export default function Survey() {
     setStep(next);
   }
 
-  function chooseBranch(id) {
-    setBranchId(id);
-    const url = new URL(window.location.href);
-    url.searchParams.set('branch', id);
-    window.history.replaceState({}, '', url);
-  }
-
   let inner;
   if (picking) {
     inner = (
       <>
         <div className="body">
           <p className="sub">{S.welcomeSub}</p>
-          <h1>{branches.length ? 'Which location did you visit?' : 'Surveys open once a branch is added'}</h1>
-          {!!branches.length && (
-            <div className="opts">
-              {branches.map(b => (
-                <button type="button" key={b.id} className="opt" onClick={() => chooseBranch(b.id)}>{b.name}</button>
-              ))}
-            </div>
-          )}
+          <h1>Open this survey from your location link</h1>
+          <p className="sub">Each branch has its own survey URL. Ask staff for the correct link.</p>
         </div>
       </>
     );

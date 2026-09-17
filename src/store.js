@@ -113,7 +113,8 @@ function tempPassword() {
 export function createUser({ username, password, branchIds }) {
   const name = (username || '').trim();
   if (!name) return { error: 'Username is required' };
-  const pass = (password || '').trim() || tempPassword();
+  const pass = (password || '').trim();
+  if (!pass) return { error: 'Password is required' };
   if (pass.length < 4) return { error: 'Password must be at least 4 characters' };
   const users = getUsers();
   if (users.some(u => u.username.toLowerCase() === name.toLowerCase())) {
@@ -233,9 +234,19 @@ export function greeting(username) {
   return `${part}, ${username}`;
 }
 
-export function periodRange(preset, now = new Date()) {
+export function periodRange(preset, now = new Date(), custom = {}) {
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
+  if (preset === 'custom' && custom.from && custom.to) {
+    const start = new Date(`${custom.from}T00:00:00`);
+    const stop = new Date(`${custom.to}T23:59:59.999`);
+    const from = start <= stop ? start : stop;
+    const to = start <= stop ? stop : start;
+    const span = to.getTime() - from.getTime();
+    const prevEnd = new Date(from.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - span);
+    return { start: from, end: to, prevStart, prevEnd };
+  }
   if (preset === '7d') {
     const start = new Date(now);
     start.setDate(start.getDate() - 6);
