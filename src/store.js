@@ -466,8 +466,6 @@ export function useData() {
   useEffect(() => subscribe(() => bump(n => n + 1)), []);
   useEffect(() => {
     pullServer();
-    const t = setInterval(pullServer, 8000);
-    return () => clearInterval(t);
   }, []);
   return {
     users: getUsers(),
