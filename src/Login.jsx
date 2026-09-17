@@ -1,24 +1,30 @@
 import { useState } from 'react';
 import { isSuper, login, useData } from './store';
 
-export default function Login() {
+export default function Login({ onEnter }) {
   const { error: dbError } = useData();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
     setError('');
+    setBusy(true);
     try {
       const user = await login(username, password);
       if (!user) {
         setError('Wrong username or password');
         return;
       }
-      window.location.href = isSuper(user) ? '/admin' : '/dashboard';
+      const next = isSuper(user) ? '/admin' : '/dashboard';
+      if (onEnter) onEnter(next);
+      else window.location.href = next;
     } catch {
       setError('Could not reach the database');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -39,7 +45,9 @@ export default function Login() {
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
           </label>
           {(error || dbError) && <p className="form-error">{error || dbError}</p>}
-          <button className="btn-primary" type="submit">Sign in</button>
+          <button className="btn-primary" type="submit" disabled={busy}>
+            {busy ? 'Signing in…' : 'Sign in'}
+          </button>
         </form>
       </div>
     </div>

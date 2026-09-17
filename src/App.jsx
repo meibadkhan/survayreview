@@ -17,9 +17,14 @@ function pathOf() {
   return 'survey';
 }
 
+function go(path) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export default function App() {
   const [path, setPath] = useState(pathOf);
-  const { session } = useData();
+  const { session, ready } = useData();
 
   useEffect(() => {
     const onPop = () => setPath(pathOf());
@@ -28,21 +33,32 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
     if ((path === 'admin' || path === 'dashboard') && !session) {
-      window.location.replace('/login');
+      go('/login');
     } else if (path === 'admin' && session && !isSuper(session)) {
-      window.location.replace('/dashboard');
+      go('/dashboard');
     } else if (path === 'dashboard' && session && isSuper(session)) {
-      window.location.replace('/admin');
+      go('/admin');
     }
-  }, [path, session]);
+  }, [path, session, ready]);
 
   function onLogout() {
     logout();
-    window.location.href = '/login';
+    go('/login');
   }
 
-  if (path === 'login') return <Login />;
+  if (!ready && (path === 'admin' || path === 'dashboard')) {
+    return (
+      <div className="portal">
+        <div className="login-wrap">
+          <p className="muted">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (path === 'login') return <Login onEnter={go} />;
   if (path === 'admin') {
     if (!session || !isSuper(session)) return null;
     return <AdminPanel user={session} onLogout={onLogout} />;

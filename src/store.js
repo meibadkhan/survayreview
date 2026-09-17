@@ -25,6 +25,7 @@ const listeners = new Set();
 let shared = false;
 let mutating = 0;
 let lastError = '';
+let ready = false;
 
 const cache = {
   users: [],
@@ -116,14 +117,21 @@ export async function pullServer() {
   try {
     const data = await callApi(null, 'GET');
     applyState({ ...data, shared: true });
+    ready = true;
+    notify();
     return true;
   } catch (err) {
     shared = false;
     lastError = err?.message || 'Could not reach the database';
     resetCache();
+    ready = true;
     notify();
     return false;
   }
+}
+
+export function isReady() {
+  return ready;
 }
 
 export function isShared() {
@@ -474,5 +482,6 @@ export function useData() {
     session: getSession(),
     shared: isShared(),
     error: storeError(),
+    ready: isReady(),
   };
 }
