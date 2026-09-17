@@ -60,6 +60,7 @@ export default async function handler(req, res) {
         branches: Array.isArray(body.branches) ? body.branches : state.branches,
         surveys: Array.isArray(body.surveys) ? body.surveys : state.surveys,
         resetAt: body.resetAt || state.resetAt || null,
+        updatedAt: body.updatedAt || new Date().toISOString(),
       };
       const saved = await saveState(next);
       return send(res, 200, { ok: true, ...saved });

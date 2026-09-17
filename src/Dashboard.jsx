@@ -189,23 +189,23 @@ export default function Dashboard({ user, onLogout }) {
             </div>
 
             <div className="kpis">
-              <article className="kpi">
+              <article className="kpi kpi-smile">
                 <div className="kpi-label">Smile Score <SmileIcon /></div>
                 <div className="kpi-value">{now.total ? Math.round(now.smile) : '—'}</div>
                 <p className={`kpi-delta ${smileDelta.dir}`}>{smileDelta.dir === 'down' ? '↘' : smileDelta.dir === 'up' ? '↗' : '→'} {smileDelta.text} vs previous period</p>
               </article>
-              <article className="kpi">
+              <article className="kpi kpi-subs">
                 <div className="kpi-label">Submissions <ChatIcon /></div>
                 <div className="kpi-value">{now.total}</div>
                 <p className={`kpi-delta ${subDelta.dir}`}>{subDelta.dir === 'down' ? '↘' : subDelta.dir === 'up' ? '↗' : '→'} {subDelta.text} vs previous period</p>
               </article>
-              <article className="kpi">
+              <article className="kpi kpi-terrible">
                 <div className="kpi-label">Terrible <WarnIcon /></div>
                 <div className="kpi-value">{now.terrible}</div>
                 <p className={`kpi-delta ${terribleDelta.dir}`}>{terribleDelta.dir === 'down' ? '↘' : terribleDelta.dir === 'up' ? '↗' : '→'} {terribleDelta.text} vs previous period</p>
               </article>
               <article
-                className={`kpi tap${openComments ? ' on' : ''}`}
+                className={`kpi kpi-comments tap${openComments ? ' on' : ''}`}
                 role="button"
                 tabIndex={0}
                 onClick={() => setOpenComments(v => !v)}

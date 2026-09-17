@@ -72,6 +72,7 @@ export async function saveState(state) {
     branches: state.branches || [],
     surveys: state.surveys || [],
     resetAt: state.resetAt || null,
+    updatedAt: state.updatedAt || null,
   };
   if (kvConfigured()) {
     await kvCommand(['SET', KEY, JSON.stringify(next)]);

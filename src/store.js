@@ -6,6 +6,7 @@ const K = {
   surveys: 'gm_surveys',
   session: 'gm_session',
   resetAt: 'gm_resetAt',
+  updatedAt: 'gm_updatedAt',
 };
 
 export const SMILE = {
@@ -19,6 +20,9 @@ export const SMILE = {
 const listeners = new Set();
 let shared = false;
 let persistTimer = 0;
+let syncRev = 0;
+let pendingSave = false;
+let persistLock = Promise.resolve();
 
 function read(key, fallback) {
   try {
@@ -36,58 +40,110 @@ function snapshot() {
     branches: read(K.branches, []),
     surveys: read(K.surveys, []),
     resetAt: read(K.resetAt, null),
+    updatedAt: read(K.updatedAt, null),
   };
+}
+
+function coreState(data) {
+  return JSON.stringify({
+    users: data.users || [],
+    branches: data.branches || [],
+    surveys: data.surveys || [],
+    resetAt: data.resetAt || null,
+  });
+}
+
+function markDirty() {
+  syncRev += 1;
+  pendingSave = true;
+  localStorage.setItem(K.updatedAt, JSON.stringify(new Date().toISOString()));
 }
 
 function applyRemote(data) {
   if (!data || !Array.isArray(data.users)) return;
-  localStorage.setItem(K.users, JSON.stringify(data.users));
-  localStorage.setItem(K.branches, JSON.stringify(data.branches || []));
-  localStorage.setItem(K.surveys, JSON.stringify(data.surveys || []));
-  if (data.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(data.resetAt));
+  if (pendingSave) return;
+  const next = {
+    users: data.users,
+    branches: data.branches || [],
+    surveys: data.surveys || [],
+    resetAt: data.resetAt || null,
+    updatedAt: data.updatedAt || null,
+  };
+  if (coreState(snapshot()) === coreState(next)) {
+    shared = !!data.shared;
+    return;
+  }
+  localStorage.setItem(K.users, JSON.stringify(next.users));
+  localStorage.setItem(K.branches, JSON.stringify(next.branches));
+  localStorage.setItem(K.surveys, JSON.stringify(next.surveys));
+  if (next.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(next.resetAt));
+  if (next.updatedAt) localStorage.setItem(K.updatedAt, JSON.stringify(next.updatedAt));
   shared = !!data.shared;
   listeners.forEach(fn => fn());
 }
 
-function write(key, value) {
+function write(key, value, immediate = false) {
+  markDirty();
   localStorage.setItem(key, JSON.stringify(value));
   listeners.forEach(fn => fn());
-  queuePersist();
+  if (immediate) {
+    clearTimeout(persistTimer);
+    persistTimer = 0;
+    persistFull().catch(() => {});
+  } else {
+    queuePersist();
+  }
 }
 
 function queuePersist() {
   clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
+    persistTimer = 0;
     persistFull().catch(() => {});
   }, 250);
 }
 
 async function persistFull() {
+  persistLock = persistLock.then(runPersist, runPersist);
+  return persistLock;
+}
+
+async function runPersist() {
+  const rev = syncRev;
   try {
     const res = await fetch('/api/state', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(snapshot()),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      queuePersist();
+      return;
+    }
     const json = await res.json();
     shared = !!json.shared;
-    listeners.forEach(fn => fn());
+    if (syncRev === rev) pendingSave = false;
+    else await runPersist();
   } catch {
     shared = false;
+    queuePersist();
   }
 }
 
 export async function pullServer() {
+  if (pendingSave || persistTimer) return false;
+  const rev = syncRev;
   try {
     const res = await fetch('/api/state');
     if (!res.ok) return false;
     const data = await res.json();
+    if (pendingSave || persistTimer || syncRev !== rev) return false;
     shared = !!data.shared;
     const local = snapshot();
     const remoteEmpty = (data.users || []).length <= 1 && !(data.branches || []).length && !(data.surveys || []).length;
     const localHas = local.users.length > 1 || local.branches.length || local.surveys.length;
     if (remoteEmpty && !data.resetAt && localHas) {
+      pendingSave = true;
       await persistFull();
       return true;
     }
@@ -188,7 +244,8 @@ export function login(username, password) {
     return isSuper(u) && (name === 'admin' || name === 'superadmin');
   });
   if (!user) return null;
-  write(K.session, user.id);
+  localStorage.setItem(K.session, JSON.stringify(user.id));
+  listeners.forEach(fn => fn());
   return user;
 }
 
@@ -218,7 +275,7 @@ export function createUser({ username, password, branchIds }) {
     role: 'user',
     branchIds: branchIds || [],
   };
-  write(K.users, [...users, user]);
+  write(K.users, [...users, user], true);
   if ((branchIds || []).length) assignBranches(user.id, branchIds);
   return { user: getUsers().find(u => u.id === user.id) };
 }
@@ -229,7 +286,7 @@ export function assignBranches(userId, branchIds) {
     if (isSuper(u)) return { ...u, branchIds: [] };
     if (u.id === userId) return { ...u, branchIds: unique };
     return { ...u, branchIds: (u.branchIds || []).filter(id => !unique.includes(id)) };
-  }));
+  }), true);
 }
 
 export function ownerOfBranch(branchId) {
@@ -268,7 +325,7 @@ export function deleteUser(id) {
   const target = users.find(u => u.id === id);
   if (!target) return { error: 'User not found' };
   if (isSuper(target)) return { error: 'The super admin account cannot be deleted' };
-  write(K.users, users.filter(u => u.id !== id));
+  write(K.users, users.filter(u => u.id !== id), true);
   const sessionId = read(K.session, null);
   if (sessionId === id) localStorage.removeItem(K.session);
   listeners.forEach(fn => fn());
@@ -283,16 +340,16 @@ export function createBranch(name) {
     return { error: 'That branch already exists' };
   }
   const branch = { id: uid('br'), name: label };
-  write(K.branches, [...branches, branch]);
+  write(K.branches, [...branches, branch], true);
   return { branch };
 }
 
 export function deleteBranch(id) {
-  write(K.branches, getBranches().filter(b => b.id !== id));
+  write(K.branches, getBranches().filter(b => b.id !== id), true);
   write(K.users, getUsers().map(u => ({
     ...u,
     branchIds: (u.branchIds || []).filter(x => x !== id),
-  })));
+  })), true);
   return { ok: true };
 }
 
@@ -306,11 +363,15 @@ export function clearAllData(actor) {
     role: 'superadmin',
     branchIds: [],
   };
+  markDirty();
   localStorage.setItem(K.users, JSON.stringify([keep]));
   localStorage.setItem(K.branches, JSON.stringify([]));
   localStorage.setItem(K.surveys, JSON.stringify([]));
   localStorage.setItem(K.resetAt, JSON.stringify(new Date().toISOString()));
-  write(K.session, keep.id);
+  localStorage.setItem(K.session, JSON.stringify(keep.id));
+  listeners.forEach(fn => fn());
+  clearTimeout(persistTimer);
+  persistTimer = 0;
   persistFull().catch(() => {});
   return { ok: true };
 }

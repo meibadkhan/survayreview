@@ -19,6 +19,7 @@ export default function Login() {
   return (
     <div className="portal">
       <div className="login-wrap">
+        <div className="brand-mark" aria-hidden="true">GM</div>
         <p className="dash-kicker">Guest Matrix</p>
         <h1 className="login-title">Staff login</h1>
         <p className="login-sub">Sign in to view guest feedback for your restaurant.</p>
