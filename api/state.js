@@ -56,9 +56,10 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT' || req.method === 'POST') {
       const next = {
-        users: body.users || state.users,
-        branches: body.branches || state.branches,
-        surveys: mergeSurveys(body.surveys, state.surveys),
+        users: Array.isArray(body.users) ? body.users : state.users,
+        branches: Array.isArray(body.branches) ? body.branches : state.branches,
+        surveys: Array.isArray(body.surveys) ? body.surveys : state.surveys,
+        resetAt: body.resetAt || state.resetAt || null,
       };
       const saved = await saveState(next);
       return send(res, 200, { ok: true, ...saved });

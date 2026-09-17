@@ -120,6 +120,8 @@ textarea { min-height: 100px; max-height: 28vh; resize: none; margin-bottom: 12p
 }
 .ghost-btn, .ghost-link { border: 1px solid #e5e7eb; background: #fff; color: #374151; }
 .danger-btn { border: 1px solid #fecaca; background: #fff; color: #b91c1c; }
+.danger-btn.wide { width: 100%; min-height: 44px; justify-content: center; }
+.danger-panel { border-color: #fecaca; }
 .form-error { color: #b91c1c; font-size: 13px; margin-bottom: 10px; }
 .form-ok { color: #047857; font-size: 13px; margin-bottom: 10px; }
 .tabs { display: flex; gap: 6px; margin-bottom: 14px; }

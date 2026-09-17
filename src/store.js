@@ -5,6 +5,7 @@ const K = {
   branches: 'gm_branches',
   surveys: 'gm_surveys',
   session: 'gm_session',
+  resetAt: 'gm_resetAt',
 };
 
 export const SMILE = {
@@ -34,6 +35,7 @@ function snapshot() {
     users: read(K.users, []),
     branches: read(K.branches, []),
     surveys: read(K.surveys, []),
+    resetAt: read(K.resetAt, null),
   };
 }
 
@@ -42,6 +44,7 @@ function applyRemote(data) {
   localStorage.setItem(K.users, JSON.stringify(data.users));
   localStorage.setItem(K.branches, JSON.stringify(data.branches || []));
   localStorage.setItem(K.surveys, JSON.stringify(data.surveys || []));
+  if (data.resetAt) localStorage.setItem(K.resetAt, JSON.stringify(data.resetAt));
   shared = !!data.shared;
   listeners.forEach(fn => fn());
 }
@@ -84,7 +87,7 @@ export async function pullServer() {
     const local = snapshot();
     const remoteEmpty = (data.users || []).length <= 1 && !(data.branches || []).length && !(data.surveys || []).length;
     const localHas = local.users.length > 1 || local.branches.length || local.surveys.length;
-    if (remoteEmpty && localHas) {
+    if (remoteEmpty && !data.resetAt && localHas) {
       await persistFull();
       return true;
     }
@@ -290,6 +293,25 @@ export function deleteBranch(id) {
     ...u,
     branchIds: (u.branchIds || []).filter(x => x !== id),
   })));
+  return { ok: true };
+}
+
+export function clearAllData(actor) {
+  if (!isSuper(actor)) return { error: 'Not allowed' };
+  const current = getUsers().find(u => u.id === actor.id) || actor;
+  const keep = {
+    id: current.id,
+    username: current.username,
+    password: current.password,
+    role: 'superadmin',
+    branchIds: [],
+  };
+  localStorage.setItem(K.users, JSON.stringify([keep]));
+  localStorage.setItem(K.branches, JSON.stringify([]));
+  localStorage.setItem(K.surveys, JSON.stringify([]));
+  localStorage.setItem(K.resetAt, JSON.stringify(new Date().toISOString()));
+  write(K.session, keep.id);
+  persistFull().catch(() => {});
   return { ok: true };
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import {
   assignBranches,
+  clearAllData,
   createBranch,
   createUser,
   deleteBranch,
@@ -104,7 +105,7 @@ function BranchPicks({ branches, selectedIds, onToggle }) {
 }
 
 export default function AdminPanel({ user, onLogout }) {
-  const { users, branches, surveys, shared } = useData();
+  const { users, branches, surveys } = useData();
   const [tab, setTab] = useState('branches');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -112,6 +113,7 @@ export default function AdminPanel({ user, onLogout }) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
+  const [wipeText, setWipeText] = useState('');
 
   const staff = users.filter(u => u.role === 'user');
 
@@ -148,6 +150,15 @@ export default function AdminPanel({ user, onLogout }) {
     setTimeout(() => setCopied(''), 1600);
   }
 
+  function wipeAll() {
+    if (wipeText !== 'DELETE') return flash('Type DELETE to confirm', true);
+    if (!window.confirm('Delete all branches, users, comments and surveys? Your login will stay.')) return;
+    const res = clearAllData(user);
+    if (res.error) return flash(res.error, true);
+    setWipeText('');
+    flash('All branches, users, comments and surveys were deleted.');
+  }
+
   function setUserBranch(userId, branchId, on) {
     const target = users.find(u => u.id === userId);
     if (!target) return;
@@ -182,10 +193,10 @@ export default function AdminPanel({ user, onLogout }) {
           <>
             <form className="panel" onSubmit={addBranch}>
               <h2>Add restaurant branch</h2>
-              <p className="panel-sub">Add locations such as HBK1, HBK2, HBK3. Each branch gets its own survey link and QR code. Create QRs from your live site so phones open the public URL, not localhost.</p>
+              <p className="panel-sub">Add a location. Each branch gets its own survey link and QR code. Create QRs from your live site so phones open the public URL, not localhost.</p>
               <label className="field">
                 <span>Branch name</span>
-                <input value={branchName} onChange={e => setBranchName(e.target.value)} placeholder="HBK1" />
+                <input value={branchName} onChange={e => setBranchName(e.target.value)} placeholder="Branch name" />
               </label>
               <button className="btn-primary" type="submit">Add branch</button>
             </form>
@@ -213,7 +224,7 @@ export default function AdminPanel({ user, onLogout }) {
                 </div>
               );
             })}
-            {!branches.length && <div className="panel"><p className="muted">No branches yet. Add HBK1, HBK2, HBK3, then assign them to a user.</p></div>}
+            {!branches.length && <div className="panel"><p className="muted">No branches yet. Add a location, then assign it to a user.</p></div>}
           </>
         )}
 
@@ -224,7 +235,7 @@ export default function AdminPanel({ user, onLogout }) {
               <p className="panel-sub">First create a username and password. After the user is created, tap each branch below one by one to assign it. Selected branches stay highlighted.</p>
               <label className="field">
                 <span>Username</span>
-                <input value={username} onChange={e => setUsername(e.target.value)} placeholder="ibadkhan" />
+                <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" />
               </label>
               <label className="field">
                 <span>Password</span>
@@ -272,7 +283,17 @@ export default function AdminPanel({ user, onLogout }) {
           </>
         )}
 
-        <p className="signed-as">Signed in as super admin {user.username} · {shared ? 'Live save on for every device' : 'This device only until Vercel KV is added'}</p>
+        <form className="panel danger-panel" onSubmit={e => { e.preventDefault(); wipeAll(); }}>
+          <h2>Delete all data</h2>
+          <p className="panel-sub">Removes every branch, user, comment, and survey from this app. Your super admin login stays so you can set things up again.</p>
+          <label className="field">
+            <span>Type DELETE to confirm</span>
+            <input value={wipeText} onChange={e => setWipeText(e.target.value)} placeholder="DELETE" autoComplete="off" />
+          </label>
+          <button className="danger-btn wide" type="submit">Delete everything</button>
+        </form>
+
+        <p className="signed-as">Signed in as {user.username}</p>
       </div>
     </div>
   );
