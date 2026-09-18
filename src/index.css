@@ -80,6 +80,7 @@ textarea { min-height: 100px; max-height: 28vh; resize: none; margin-bottom: 12p
 .next.wide { width: 100%; }
 .next:disabled { opacity: .4; }
 .meta { color: #5a4030; font-size: 13px; line-height: 1.6; word-break: break-all; }
+.oops { color: #e11d48; font-size: 14px; font-weight: 700; margin-bottom: 10px; }
 @media (max-height: 640px) {
   .page-survey { justify-content: flex-start; overflow-y: auto; }
 }

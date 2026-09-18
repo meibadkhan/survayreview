@@ -433,7 +433,7 @@ export function answerValue(survey, id) {
 }
 
 export function commentDetails(survey) {
-  const food = answerValue(survey, 'q9');
+  const food = answerValue(survey, 'q9') || answerValue(survey, 'q6');
   const comment = answerValue(survey, 'q4');
   const raw = answerValue(survey, 'q5') || answerValue(survey, 'q10');
   let order = '';

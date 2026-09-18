@@ -3,6 +3,8 @@
   "welcomeSub": "Thank you for visiting Guest Matrix!",
   "welcomeTitle": "Your feedback is valuable to us! Please fill in this 30 second survey :)",
   "thanks": "Thank you for completing our survey!",
+  "oops": "Oops!",
+  "limitTitle": "You have completed the maximum number of submissions allowed.",
   "questions": [
     {
       "id": "q1",
@@ -10,6 +12,7 @@
       "text": "How was your experience today?",
       "type": "choice",
       "isMultiple": false,
+      "advanceOnPick": true,
       "options": ["Excellent", "Good", "Neutral", "Bad", "Terrible"]
     },
     {
@@ -34,9 +37,10 @@
       "id": "q6",
       "label": "Feedback",
       "text": "What can we improve?",
-      "type": "choice",
-      "isMultiple": true,
-      "options": ["Ambiance", "Guest Service", "Food Quality"],
+      "type": "text",
+      "isMultiple": false,
+      "optional": true,
+      "placeholder": "Tell us what we can improve...",
       "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
     },
     {
@@ -64,7 +68,8 @@
       "type": "input",
       "isMultiple": false,
       "optional": true,
-      "placeholder": "Food Item Names (E.g., Cheese Pizza)"
+      "placeholder": "Food Item Names (E.g., Cheese Pizza)",
+      "showIf": { "id": "q1", "any": [] }
     },
     {
       "id": "q4",
