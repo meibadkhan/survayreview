@@ -34,6 +34,15 @@
       "showIf": { "id": "q2", "any": ["Guest Service"] }
     },
     {
+      "id": "q12",
+      "label": "Feedback",
+      "text": "What did you like about the ambiance?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Cleanliness", "Temperature", "Sitting Plan"],
+      "showIf": { "id": "q2", "any": ["Ambiance"] }
+    },
+    {
       "id": "q6",
       "label": "Feedback",
       "text": "What can we improve?",
@@ -41,6 +50,15 @@
       "isMultiple": true,
       "options": ["Ambiance", "Guest Service", "Food Quality"],
       "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
+    },
+    {
+      "id": "q11",
+      "label": "Feedback",
+      "text": "What can we improve about the ambiance?",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Cleanliness", "Temperature", "Sitting Plan"],
+      "showIf": { "id": "q6", "any": ["Ambiance"] }
     },
     {
       "id": "q7",
