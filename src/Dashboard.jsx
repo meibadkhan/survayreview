@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './dashboard.css';
 import {
   INDUSTRY,
@@ -176,6 +176,8 @@ function Icon({ name }) {
     check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,
     download: <><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></>,
     cal: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></>,
+    close: <path d="M6 6l12 12M18 6 6 18" />,
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   };
   return <svg className="voc-ico" {...common}>{paths[name]}</svg>;
 }
@@ -354,6 +356,11 @@ function Benchmark({ label, value, vs, better }) {
   );
 }
 
+function locationRow(r) {
+  const smile = r.now.total ? Math.round(r.now.smile) : 0;
+  return { smile, face: smile >= 95 ? 'excellent' : smile >= 90 ? 'good' : 'average' };
+}
+
 function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSelect, selectedId }) {
   const filtered = rows.filter(r => r.now.total >= minSubs);
   const shown = mode === 'under'
@@ -425,7 +432,7 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
           </thead>
           <tbody>
             {slice.map(r => {
-              const smile = r.now.total ? Math.round(r.now.smile) : 0;
+              const { smile, face } = locationRow(r);
               return (
                 <tr
                   key={r.branch.id}
@@ -435,7 +442,7 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
                   <td className="voc-loc">{r.branch.name} <span>→</span></td>
                   <td>
                     <span className={`voc-smile ${smileTone(smile)}`}>
-                      <Face kind={smile >= 95 ? 'excellent' : smile >= 90 ? 'good' : 'average'} size={15} />
+                      <Face kind={face} size={15} />
                       {r.now.total ? smile : '—'}
                     </span>
                     {r.now.total ? <Delta value={delta(r.now.smile, r.was.smile, 'points')} /> : null}
@@ -470,6 +477,34 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
             )}
           </tbody>
         </table>
+      </div>
+      <div className="voc-loc-cards">
+        {slice.map(r => {
+          const { smile, face } = locationRow(r);
+          return (
+            <button
+              type="button"
+              key={r.branch.id}
+              className={`voc-loc-card${selectedId === r.branch.id ? ' on' : ''}`}
+              onClick={() => onSelect(r)}
+            >
+              <div className="voc-loc-card-top">
+                <b>{r.branch.name}</b>
+                <span className="voc-smile">
+                  <Face kind={face} size={16} />
+                  {r.now.total ? smile : '—'}
+                </span>
+              </div>
+              <div className="voc-loc-grid">
+                <span>Submissions <b>{fmtNum(r.now.total)}</b> <Delta value={delta(r.now.total, r.was.total, 'abs')} /></span>
+                <span>Positive <b>{r.now.total ? fmtPct(r.now.positivePct) : '—'}</b></span>
+                <span>Incidents <b>{fmtNum(r.now.incidents)}</b> <Delta value={delta(r.now.incidents, r.was.incidents, 'abs')} invert /></span>
+                <span>Unresolved <b>{fmtNum(r.now.unresolved)}</b></span>
+              </div>
+            </button>
+          );
+        })}
+        {!slice.length && <p className="voc-muted">No locations match these filters.</p>}
       </div>
       <div className="voc-table-foot">
         <span>Showing {searched.length ? cur * size + 1 : 0} - {Math.min(searched.length, cur * size + slice.length)} of {searched.length} record(s).</span>
@@ -523,6 +558,11 @@ export default function Dashboard({ user, onLogout }) {
   const [menu, setMenu] = useState(false);
   const range = periodRange(preset === 'custom' ? 'custom' : preset, new Date(), { from, to });
 
+  useEffect(() => {
+    document.body.classList.toggle('voc-lock', menu);
+    return () => document.body.classList.remove('voc-lock');
+  }, [menu]);
+
   const current = useMemo(() => mySurveys.filter(s => inRange(s.at, range.start, range.end)), [mySurveys, range]);
   const previous = useMemo(() => mySurveys.filter(s => inRange(s.at, range.prevStart, range.prevEnd)), [mySurveys, range]);
   const now = statsFor(current);
@@ -564,6 +604,9 @@ export default function Dashboard({ user, onLogout }) {
 
   const dateLabel = range.start && range.end
     ? `${prettyDate(range.start)} - ${prettyDate(range.end)}`
+    : 'All time';
+  const dateShort = range.start && range.end
+    ? `${prettyShort(range.start)} – ${prettyShort(range.end)}`
     : 'All time';
 
   const vocMain = (
@@ -722,9 +765,14 @@ export default function Dashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="voc">
+    <div className={`voc${menu ? ' nav-open' : ''}`}>
       <aside className={`voc-side${menu ? ' open' : ''}`}>
-        <div className="voc-brand">Guest Matrix</div>
+        <div className="voc-brand-row">
+          <div className="voc-brand">Guest Matrix</div>
+          <button type="button" className="voc-close" onClick={() => setMenu(false)} aria-label="Close menu">
+            <Icon name="close" />
+          </button>
+        </div>
         {NAV.map(group => (
           <div key={group.group || 'main'} className="voc-nav-group">
             {group.group && <p>{group.group}</p>}
@@ -745,11 +793,14 @@ export default function Dashboard({ user, onLogout }) {
       {menu && <button type="button" className="voc-scrim" onClick={() => setMenu(false)} aria-label="Close menu" />}
       <div className="voc-main">
         <header className="voc-top">
-          <button type="button" className="voc-menu" onClick={() => setMenu(true)}>☰</button>
+          <button type="button" className="voc-menu" onClick={() => setMenu(true)} aria-label="Open menu">
+            <Icon name="menu" />
+          </button>
           <label className="voc-date">
             <Icon name="cal" />
-            <span>{dateLabel}</span>
-            <select value={preset} onChange={e => applyPreset(e.target.value)}>
+            <span className="voc-date-long">{dateLabel}</span>
+            <span className="voc-date-short">{dateShort}</span>
+            <select value={preset} onChange={e => applyPreset(e.target.value)} aria-label="Date range">
               <option value="30d">Last 30 Days</option>
               <option value="7d">Last 7 days</option>
               <option value="month">This month</option>
