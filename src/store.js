@@ -21,6 +21,37 @@ export const SMILE = {
   Terrible: 0,
 };
 
+export const STARS = {
+  Excellent: 5,
+  Good: 4,
+  Neutral: 3,
+  Bad: 2,
+  Terrible: 1,
+};
+
+export const INDUSTRY = {
+  smile: 95,
+  avgRating: 4.1,
+  incidentRate: 0.076,
+  reviewRate: 0.6,
+  resolutionRate: 0.82,
+  replyMinutes: 72,
+};
+
+export function isIncident(survey) {
+  return survey?.experience === 'Bad' || survey?.experience === 'Terrible';
+}
+
+export function incidentReviewed(survey) {
+  const d = commentDetails(survey);
+  return !!(d.comment || d.food || d.phone || d.order);
+}
+
+export function incidentResolved(survey) {
+  const d = commentDetails(survey);
+  return !!(d.phone || d.order);
+}
+
 const listeners = new Set();
 let shared = false;
 let mutating = 0;
@@ -441,14 +472,15 @@ export function periodRange(preset, now = new Date(), custom = {}) {
     const prevStart = new Date(prevEnd.getTime() - span);
     return { start: from, end: to, prevStart, prevEnd };
   }
-  if (preset === '7d') {
+  if (preset === '7d' || preset === '30d') {
+    const days = preset === '7d' ? 6 : 29;
     const start = new Date(now);
-    start.setDate(start.getDate() - 6);
+    start.setDate(start.getDate() - days);
     start.setHours(0, 0, 0, 0);
     const prevEnd = new Date(start);
     prevEnd.setMilliseconds(-1);
     const prevStart = new Date(prevEnd);
-    prevStart.setDate(prevStart.getDate() - 6);
+    prevStart.setDate(prevStart.getDate() - days);
     prevStart.setHours(0, 0, 0, 0);
     return { start, end, prevStart, prevEnd };
   }
@@ -505,17 +537,41 @@ export function commentSubmissions(list) {
 
 export function statsFor(list) {
   const total = list.length;
-  const terrible = list.filter(s => s.experience === 'Terrible').length;
-  const scores = list.map(s => s.smile).filter(n => typeof n === 'number');
-  const smile = scores.length
-    ? scores.reduce((a, b) => a + b, 0) / scores.length
-    : 0;
   const byRating = Object.fromEntries(Object.keys(SMILE).map(k => [
     k,
     list.filter(s => s.experience === k).length,
   ]));
+  const terrible = byRating.Terrible || 0;
+  const scores = list.map(s => s.smile).filter(n => typeof n === 'number');
+  const smile = scores.length
+    ? scores.reduce((a, b) => a + b, 0) / scores.length
+    : 0;
+  const stars = list.map(s => STARS[s.experience]).filter(n => typeof n === 'number');
+  const avgRating = stars.length
+    ? stars.reduce((a, b) => a + b, 0) / stars.length
+    : 0;
   const positive = (byRating.Excellent || 0) + (byRating.Good || 0);
-  return { total, terrible, smile, byRating, positive };
+  const incidentList = list.filter(isIncident);
+  const incidents = incidentList.length;
+  const reviewed = incidentList.filter(incidentReviewed).length;
+  const resolved = incidentList.filter(incidentResolved).length;
+  const unresolved = incidents - resolved;
+  return {
+    total,
+    terrible,
+    smile,
+    byRating,
+    positive,
+    avgRating,
+    incidents,
+    reviewed,
+    resolved,
+    unresolved,
+    positivePct: total ? (positive / total) * 100 : 0,
+    incidentPct: total ? (incidents / total) * 100 : 0,
+    resolvedPct: incidents ? (resolved / incidents) * 100 : 100,
+    reviewPct: incidents ? (reviewed / incidents) * 100 : 100,
+  };
 }
 
 export function useData() {
