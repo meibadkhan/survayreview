@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import AdminPanel from './AdminPanel.jsx';
-import Dashboard from './Dashboard.jsx';
-import Login from './Login.jsx';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import Survey from './Survey.jsx';
 import { branchIdFromLocation, isSuper, logout, seed, useData } from './store';
+
+const Login = lazy(() => import('./Login.jsx'));
+const AdminPanel = lazy(() => import('./AdminPanel.jsx'));
+const Dashboard = lazy(() => import('./Dashboard.jsx'));
 
 seed();
 
@@ -22,15 +23,8 @@ function go(path) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
-export default function App() {
-  const [path, setPath] = useState(pathOf);
+function StaffRoutes({ path }) {
   const { session, ready } = useData();
-
-  useEffect(() => {
-    const onPop = () => setPath(pathOf());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -58,14 +52,41 @@ export default function App() {
     );
   }
 
-  if (path === 'login') return <Login onEnter={go} />;
+  if (path === 'login') {
+    return (
+      <Suspense fallback={null}>
+        <Login onEnter={go} />
+      </Suspense>
+    );
+  }
   if (path === 'admin') {
     if (!session || !isSuper(session)) return null;
-    return <AdminPanel user={session} onLogout={onLogout} />;
+    return (
+      <Suspense fallback={null}>
+        <AdminPanel user={session} onLogout={onLogout} />
+      </Suspense>
+    );
   }
   if (path === 'dashboard') {
     if (!session || isSuper(session)) return null;
-    return <Dashboard user={session} onLogout={onLogout} />;
+    return (
+      <Suspense fallback={null}>
+        <Dashboard user={session} onLogout={onLogout} />
+      </Suspense>
+    );
   }
   return <Survey />;
+}
+
+export default function App() {
+  const [path, setPath] = useState(pathOf);
+
+  useEffect(() => {
+    const onPop = () => setPath(pathOf());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  if (path === 'survey') return <Survey />;
+  return <StaffRoutes path={path} />;
 }

@@ -1,4 +1,4 @@
-import { isSharedStore, loadState, handleAction } from '../server/persist.js';
+import { findBranch, isSharedStore, loadState, handleAction } from '../server/persist.js';
 
 export const config = { runtime: 'nodejs' };
 
@@ -25,6 +25,17 @@ function readBody(req) {
   });
 }
 
+function queryOf(req) {
+  const fromQuery = req.query && typeof req.query === 'object' ? req.query : {};
+  let fromUrl = {};
+  try {
+    fromUrl = Object.fromEntries(new URL(req.url, 'http://local').searchParams);
+  } catch {
+    fromUrl = {};
+  }
+  return { ...fromQuery, ...fromUrl };
+}
+
 function withShare(state) {
   return { ...state, shared: isSharedStore() };
 }
@@ -48,6 +59,12 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET' || req.method === 'PUT') {
+      const branchId = queryOf(req).branch;
+      if (req.method === 'GET' && branchId) {
+        const branch = await findBranch(branchId);
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        return send(res, 200, { ok: true, branch: branch || null });
+      }
       const state = await loadState();
       return send(res, 200, { ok: true, ...withShare(state) });
     }

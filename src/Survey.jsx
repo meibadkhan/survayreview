@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import S from './survey.json';
-import { branchIdFromLocation, saveSurvey, useData } from './store';
+import { branchIdFromLocation, cachedBranch, pullBranch, saveSurvey } from './store';
 
 const codes = ['+92', '+1', '+44', '+971'];
 const MAX_SUBS = 2;
@@ -95,25 +95,32 @@ function phoneOk(s, required) {
 }
 
 export default function Survey() {
-  const { branches } = useData();
   const [branchId] = useState(() => branchIdFromLocation());
+  const [branch, setBranch] = useState(() => cachedBranch(branchId) || (branchId ? { id: branchId, name: '' } : null));
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState(blank);
   const [done, setDone] = useState(null);
-  const [blocked, setBlocked] = useState(false);
+  const [blocked, setBlocked] = useState(() => !!(branchId && countFor(branchId) >= MAX_SUBS));
   const qs = visible(answers);
-  const branch = branches.find(b => b.id === branchId) || null;
-  const activeBranchId = branch?.id || '';
+  const activeBranchId = branchId || '';
   const device = deviceId();
 
   useEffect(() => {
-    if (!branchId) window.location.replace('/login');
-    else if (branches.length && !branch) window.location.replace('/login');
-  }, [branch, branchId, branches.length]);
-
-  useEffect(() => {
-    if (activeBranchId && countFor(activeBranchId) >= MAX_SUBS) setBlocked(true);
-  }, [activeBranchId]);
+    if (!branchId) {
+      window.location.replace('/login');
+      return;
+    }
+    let live = true;
+    pullBranch(branchId).then(result => {
+      if (!live) return;
+      if (result.missing) {
+        window.location.replace('/login');
+        return;
+      }
+      if (result.branch) setBranch(result.branch);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [branchId]);
 
   function pick(q, opt) {
     setAnswers(a => {
@@ -127,7 +134,7 @@ export default function Survey() {
   }
 
   function ready() {
-    if (step === 0) return !!branch;
+    if (step === 0) return !!branchId;
     const q = qs[step - 1];
     if (!q) return true;
     if (q.type === 'contact') return phoneOk(answers[q.id].phone, q.phoneRequired);
@@ -144,6 +151,7 @@ export default function Survey() {
       }
       const survey = saveSurvey({
         branchId: activeBranchId,
+        branchName: branch?.name,
         answers: qs.map(q => {
           let value = answers[q.id];
           if (q.type === 'contact') {
@@ -160,7 +168,7 @@ export default function Survey() {
   }
 
   let inner;
-  if (!branch) {
+  if (!branchId) {
     inner = null;
   } else if (blocked) {
     inner = (
@@ -174,7 +182,7 @@ export default function Survey() {
     inner = (
       <>
         <div className="body">
-          <p className="sub">{S.welcomeSub}{branch ? ` · ${branch.name}` : ''}</p>
+          <p className="sub">{S.welcomeSub}{branch?.name ? ` · ${branch.name}` : ''}</p>
           <h1>{S.welcomeTitle}</h1>
         </div>
         <div className="nav"><button className="next wide" onClick={() => go(1)}>Next <Arrow /></button></div>

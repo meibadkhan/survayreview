@@ -170,8 +170,56 @@ export function branchIdFromLocation(loc = window.location) {
   return new URLSearchParams(loc.search).get('branch') || '';
 }
 
+export function isSurveyLocation(loc = window.location) {
+  const path = (loc.pathname || '').replace(/\/+$/, '') || '/';
+  return path.startsWith('/b/') || !!new URLSearchParams(loc.search).get('branch');
+}
+
+const BRANCH_CACHE = 'gm_branch_cache';
+
+function readBranchCache(id) {
+  if (!id) return null;
+  try {
+    const map = JSON.parse(sessionStorage.getItem(BRANCH_CACHE) || '{}');
+    return map[id] || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeBranchCache(branch) {
+  if (!branch?.id) return;
+  try {
+    const map = JSON.parse(sessionStorage.getItem(BRANCH_CACHE) || '{}');
+    map[branch.id] = { id: branch.id, name: branch.name };
+    sessionStorage.setItem(BRANCH_CACHE, JSON.stringify(map));
+  } catch {
+    /* private mode */
+  }
+}
+
+export function cachedBranch(id) {
+  return readBranchCache(id);
+}
+
+export async function pullBranch(id) {
+  if (!id) return { missing: true, branch: null };
+  const cached = readBranchCache(id);
+  try {
+    const res = await fetch(`/api/state?branch=${encodeURIComponent(id)}`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { missing: false, branch: cached };
+    if (!json.branch) return { missing: true, branch: null };
+    writeBranchCache(json.branch);
+    return { missing: false, branch: json.branch };
+  } catch {
+    return { missing: false, branch: cached };
+  }
+}
+
 export function seed() {
   clearOldLocalData();
+  if (isSurveyLocation()) return;
   resetCache();
   pullServer().catch(() => {});
 }
@@ -354,15 +402,16 @@ export function experienceOf(answers) {
   return Array.isArray(q1.value) ? (q1.value[0] || null) : (q1.value || null);
 }
 
-export function saveSurvey({ answers, branchId }) {
+export function saveSurvey({ answers, branchId, branchName }) {
   const branch = getBranches().find(b => b.id === branchId);
+  const cached = readBranchCache(branchId);
   const experience = experienceOf(answers);
   const survey = {
     id: uid('sbm'),
     at: new Date().toISOString(),
     updatedAt: nowIso(),
-    branchId: branch ? branch.id : null,
-    branchName: branch ? branch.name : 'Unassigned',
+    branchId: branch?.id || branchId || null,
+    branchName: branch?.name || branchName || cached?.name || 'Unassigned',
     experience,
     smile: experience in SMILE ? SMILE[experience] : null,
     answers,
@@ -473,6 +522,7 @@ export function useData() {
   const [, bump] = useState(0);
   useEffect(() => subscribe(() => bump(n => n + 1)), []);
   useEffect(() => {
+    if (isSurveyLocation()) return;
     pullServer();
   }, []);
   return {

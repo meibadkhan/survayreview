@@ -315,17 +315,36 @@ async function resetPassword(id, password) {
   return loadMongoState();
 }
 
+export async function findBranch(id) {
+  if (!id) return null;
+  const cols = await collections();
+  const doc = await cols.branches.findOne(
+    { id },
+    { projection: { _id: 0, id: 1, name: 1 } },
+  );
+  return plain(doc);
+}
+
 async function saveSurvey(survey) {
   const cols = await collections();
   await ensureSeed(cols);
   if (!survey?.id) throw httpError(400, 'Survey is required');
+  const branch = survey.branchId
+    ? await cols.branches.findOne({ id: survey.branchId }, { projection: { _id: 0, id: 1, name: 1 } })
+    : null;
+  const doc = {
+    ...survey,
+    branchId: branch?.id || survey.branchId || null,
+    branchName: branch?.name || survey.branchName || 'Unassigned',
+    updatedAt: survey.updatedAt || nowIso(),
+  };
   await cols.surveys.updateOne(
     { id: survey.id },
-    { $set: { ...survey, updatedAt: survey.updatedAt || nowIso() } },
+    { $set: doc },
     { upsert: true },
   );
   await touchMeta(cols);
-  return loadMongoState();
+  return { survey: plain({ ...doc }) };
 }
 
 async function wipe(keep) {
