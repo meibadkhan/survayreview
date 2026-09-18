@@ -37,10 +37,9 @@
       "id": "q6",
       "label": "Feedback",
       "text": "What can we improve?",
-      "type": "text",
-      "isMultiple": false,
-      "optional": true,
-      "placeholder": "Tell us what we can improve...",
+      "type": "choice",
+      "isMultiple": true,
+      "options": ["Ambiance", "Guest Service", "Food Quality"],
       "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
     },
     {
@@ -69,7 +68,7 @@
       "isMultiple": false,
       "optional": true,
       "placeholder": "Food Item Names (E.g., Cheese Pizza)",
-      "showIf": { "id": "q1", "any": [] }
+      "showIf": { "id": "q1", "any": ["Neutral", "Bad", "Terrible"] }
     },
     {
       "id": "q4",
