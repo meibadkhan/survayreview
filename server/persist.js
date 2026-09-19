@@ -347,6 +347,20 @@ async function saveSurvey(survey) {
   return { survey: plain({ ...doc }) };
 }
 
+async function setIncidentStatus(id, resolution) {
+  const cols = await collections();
+  if (!id) throw httpError(400, 'Survey is required');
+  const next = resolution === 'satisfied' || resolution === 'unsatisfied' ? resolution : null;
+  const current = await cols.surveys.findOne({ id });
+  if (!current) throw httpError(404, 'Survey not found');
+  await cols.surveys.updateOne(
+    { id },
+    { $set: { resolution: next, updatedAt: nowIso() } },
+  );
+  const doc = await cols.surveys.findOne({ id }, { projection: { _id: 0 } });
+  return { survey: plain(doc) };
+}
+
 async function wipe(keep) {
   const cols = await collections();
   if (!keep?.id) throw httpError(400, 'Not allowed');
@@ -375,6 +389,7 @@ async function wipe(keep) {
 async function handleMongoAction(body = {}) {
   const action = body.action || (body.survey ? 'saveSurvey' : '');
   if (action === 'saveSurvey') return saveSurvey(body.survey);
+  if (action === 'setIncidentStatus') return setIncidentStatus(body.id, body.resolution);
   if (action === 'createUser') return createUser(body.user);
   if (action === 'updateUser') return updateUser(body.id, body.patch || {});
   if (action === 'deleteUser') return deleteUser(body.id);

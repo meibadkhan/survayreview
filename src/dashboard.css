@@ -93,7 +93,7 @@ body:has(.voc) {
 .voc-date-long { white-space: nowrap; font-weight: 600; color: #334155; }
 .voc-date-short { display: none; font-weight: 600; color: #334155; }
 .voc-custom { flex: 1 1 100%; }
-.voc-date select, .voc-search input, .voc-custom input {
+.voc-date select, .voc-search input, .voc-search select, .voc-custom input {
   border: 0;
   background: transparent;
   min-height: 38px;
@@ -102,7 +102,7 @@ body:has(.voc) {
   color: #334155;
 }
 .voc-search { min-width: min(220px, 100%); flex: 1; }
-.voc-search input { width: 100%; }
+.voc-search input, .voc-search select { width: 100%; }
 .voc-error { color: #b91c1c; font-size: 13px; margin-bottom: 10px; }
 
 .voc-kpis {
@@ -187,6 +187,30 @@ body:has(.voc) {
   padding: 4px 10px;
   font-weight: 700;
 }
+.voc-target-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #047857;
+  background: #ecfdf5;
+  border-radius: 999px;
+  padding: 4px 8px 4px 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.voc-target-edit select, .voc-target-edit input {
+  border: 1px solid #bbf7d0;
+  background: #fff;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #047857;
+  width: auto;
+}
+.voc-target-edit input { width: 58px; }
 
 .voc-ratings { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
 .voc-rate-row {
@@ -358,6 +382,16 @@ body:has(.voc) {
 }
 .voc-inc div { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .voc-inc span, .voc-inc em { font-size: 12px; color: #94a3b8; font-style: normal; }
+.voc-inc-contact { font-size: 13px; color: #475569; margin: 4px 0 0; }
+.voc-inc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.voc-sat, .voc-unsat {
+  min-height: 40px; padding: 0 12px; border-radius: 10px;
+  font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.voc-sat { border: 1px solid #86efac; background: #ecfdf5; color: #047857; }
+.voc-sat.on { background: #16a34a; color: #fff; border-color: #16a34a; }
+.voc-unsat { border: 1px solid #fecaca; background: #fff5f5; color: #b91c1c; }
+.voc-unsat.on { background: #dc2626; color: #fff; border-color: #dc2626; }
 
 @media (max-width: 1100px) {
   .voc-grid-3, .voc-grid-2 { grid-template-columns: 1fr 1fr; }

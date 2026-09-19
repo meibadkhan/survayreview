@@ -43,13 +43,13 @@ export function isIncident(survey) {
 }
 
 export function incidentReviewed(survey) {
+  if (survey?.resolution === 'satisfied' || survey?.resolution === 'unsatisfied') return true;
   const d = commentDetails(survey);
   return !!(d.comment || d.food || d.phone || d.order);
 }
 
 export function incidentResolved(survey) {
-  const d = commentDetails(survey);
-  return !!(d.phone || d.order);
+  return survey?.resolution === 'satisfied';
 }
 
 const listeners = new Set();
@@ -97,6 +97,11 @@ function notify() {
 }
 
 function applyState(data) {
+  if (data?.survey?.id && !Array.isArray(data.users)) {
+    cache.surveys = cache.surveys.map(s => (s.id === data.survey.id ? { ...s, ...data.survey } : s));
+    notify();
+    return;
+  }
   if (!data || !Array.isArray(data.users)) return;
   cache.users = data.users;
   cache.branches = data.branches || [];
@@ -451,6 +456,23 @@ export function saveSurvey({ answers, branchId, branchName }) {
   notify();
   queueMutate('saveSurvey', { survey });
   return survey;
+}
+
+export function setIncidentStatus(id, resolution) {
+  const next = resolution === 'satisfied' || resolution === 'unsatisfied' ? resolution : null;
+  cache.surveys = cache.surveys.map(s => (
+    s.id === id ? { ...s, resolution: next, updatedAt: nowIso() } : s
+  ));
+  notify();
+  queueMutate('setIncidentStatus', { id, resolution: next });
+}
+
+export function setSmileTarget(userId, smileTarget) {
+  const n = Math.max(1, Math.min(100, Number(smileTarget) || 95));
+  cache.users = cache.users.map(u => (u.id === userId ? { ...u, smileTarget: n, updatedAt: nowIso() } : u));
+  notify();
+  queueMutate('updateUser', { id: userId, patch: { smileTarget: n } });
+  return n;
 }
 
 export function greeting(username) {

@@ -8,29 +8,22 @@ import {
   inRange,
   isIncident,
   periodRange,
+  setIncidentStatus,
+  setSmileTarget,
   statsFor,
   surveysForUser,
   useData,
 } from './store';
 
 const NAV = [
-  { group: '', items: [
-    { id: 'overview', label: 'Overview', icon: 'home' },
-    { id: 'voc', label: 'Voice of Customer', icon: 'mic' },
-    { id: 'customers', label: 'Customers', icon: 'people' },
-    { id: 'incidents', label: 'Incidents', icon: 'flag' },
-    { id: 'analytics', label: 'Incident Analytics', icon: 'chart' },
-  ] },
-  { group: 'Market Intelligence', items: [
-    { id: 'social', label: 'Social Listening', icon: 'waves' },
-  ] },
-  { group: 'Platform', items: [
-    { id: 'surveys', label: 'Surveys', icon: 'list' },
-  ] },
-  { group: 'Business', items: [
-    { id: 'staff', label: 'Staff', icon: 'user' },
-  ] },
+  { id: 'overview', label: 'Overview', icon: 'home' },
+  { id: 'voc', label: 'Voice of Customer', icon: 'mic' },
+  { id: 'customers', label: 'Customers', icon: 'people' },
+  { id: 'incidents', label: 'Incidents', icon: 'flag' },
+  { id: 'analytics', label: 'Incident Analytics', icon: 'chart' },
 ];
+
+const TARGET_PRESETS = [90, 92, 95, 97, 98, 100];
 
 const RATING_ROWS = [
   { key: 'Excellent', star: 5, color: '#6d5efc', face: 'excellent' },
@@ -261,6 +254,33 @@ function SmileGauge({ score, target = 95 }) {
   );
 }
 
+function TargetControl({ value, onChange }) {
+  const preset = TARGET_PRESETS.includes(value) ? String(value) : 'custom';
+  return (
+    <label className="voc-target-edit">
+      Target
+      <select
+        value={preset}
+        onChange={e => onChange(e.target.value === 'custom' ? value : Number(e.target.value))}
+        aria-label="Smile score target"
+      >
+        {TARGET_PRESETS.map(n => <option key={n} value={n}>{n}</option>)}
+        <option value="custom">Custom</option>
+      </select>
+      {preset === 'custom' && (
+        <input
+          type="number"
+          min="1"
+          max="100"
+          value={value}
+          onChange={e => onChange(Number(e.target.value) || 95)}
+          aria-label="Custom smile score target"
+        />
+      )}
+    </label>
+  );
+}
+
 function RatingBreakdown({ stats }) {
   const total = stats.total || 1;
   return (
@@ -361,14 +381,13 @@ function locationRow(r) {
   return { smile, face: smile >= 95 ? 'excellent' : smile >= 90 ? 'good' : 'average' };
 }
 
-function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSelect, selectedId }) {
+function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, target, onSelect, selectedId }) {
   const filtered = rows.filter(r => r.now.total >= minSubs);
   const shown = mode === 'under'
-    ? filtered.filter(r => (r.now.total ? r.now.smile : 100) < INDUSTRY.smile)
+    ? filtered.filter(r => (r.now.total ? r.now.smile : 100) < target)
     : filtered;
   const [page, setPage] = useState(0);
-  const q = query.trim().toLowerCase();
-  const searched = q ? shown.filter(r => r.branch.name.toLowerCase().includes(q)) : shown;
+  const searched = shown;
   const size = 8;
   const pages = Math.max(1, Math.ceil(searched.length / size));
   const cur = Math.min(page, pages - 1);
@@ -394,11 +413,6 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
 
   return (
     <section className="voc-card voc-table-card">
-      <div className="voc-tabs">
-        <button type="button" className="on"><Icon name="pin" /> Locations</button>
-        <button type="button" disabled>Location Labels</button>
-        <button type="button" disabled>Metric Labels</button>
-      </div>
       <div className="voc-table-tools">
         <label className="voc-min">
           <input type="checkbox" checked={minSubs > 0} onChange={e => setMinSubs(e.target.checked ? Math.max(minSubs, 1) : 0)} />
@@ -410,9 +424,6 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
           <select value={mode} onChange={e => { setMode(e.target.value); setPage(0); }}>
             <option value="under">Underperforming</option>
             <option value="all">All locations</option>
-          </select>
-          <select defaultValue="summary">
-            <option value="summary">Summary</option>
           </select>
           <button type="button" className="voc-export" onClick={exportCsv}><Icon name="download" /> Export</button>
         </div>
@@ -518,6 +529,42 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, query, onSel
   );
 }
 
+function IncidentCard({ s }) {
+  const d = commentDetails(s);
+  const status = s.resolution === 'satisfied'
+    ? 'Resolved · Satisfied'
+    : s.resolution === 'unsatisfied'
+      ? 'Not satisfied'
+      : 'Unresolved';
+  return (
+    <article className="voc-inc">
+      <div>
+        <b>{s.branchName}</b>
+        <span>{s.experience} · {new Date(s.at).toLocaleString()}</span>
+      </div>
+      <p>{d.comment || d.food || 'No comment left'}</p>
+      {d.phone && <p className="voc-inc-contact">{d.phone}{d.order ? ` · Order ${d.order}` : ''}</p>}
+      <em>{status}</em>
+      <div className="voc-inc-actions">
+        <button
+          type="button"
+          className={`voc-sat${s.resolution === 'satisfied' ? ' on' : ''}`}
+          onClick={() => setIncidentStatus(s.id, 'satisfied')}
+        >
+          Satisfied
+        </button>
+        <button
+          type="button"
+          className={`voc-unsat${s.resolution === 'unsatisfied' ? ' on' : ''}`}
+          onClick={() => setIncidentStatus(s.id, 'unsatisfied')}
+        >
+          Not satisfied
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function CommentCards({ list }) {
   if (!list.length) return <div className="voc-card"><p className="voc-muted">No comments in this date range.</p></div>;
   return (
@@ -550,8 +597,7 @@ export default function Dashboard({ user, onLogout }) {
   const [preset, setPreset] = useState('30d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [locQuery, setLocQuery] = useState('');
-  const [surveyQuery, setSurveyQuery] = useState('');
+  const [locQuery, setLocQuery] = useState('all');
   const [minSubs, setMinSubs] = useState(0);
   const [mode, setMode] = useState('all');
   const [selected, setSelected] = useState(null);
@@ -563,8 +609,12 @@ export default function Dashboard({ user, onLogout }) {
     return () => document.body.classList.remove('voc-lock');
   }, [menu]);
 
-  const current = useMemo(() => mySurveys.filter(s => inRange(s.at, range.start, range.end)), [mySurveys, range]);
-  const previous = useMemo(() => mySurveys.filter(s => inRange(s.at, range.prevStart, range.prevEnd)), [mySurveys, range]);
+  const scoped = useMemo(() => {
+    if (locQuery === 'all') return mySurveys;
+    return mySurveys.filter(s => s.branchId === locQuery);
+  }, [mySurveys, locQuery]);
+  const current = useMemo(() => scoped.filter(s => inRange(s.at, range.start, range.end)), [scoped, range]);
+  const previous = useMemo(() => scoped.filter(s => inRange(s.at, range.prevStart, range.prevEnd)), [scoped, range]);
   const now = statsFor(current);
   const was = statsFor(previous);
   const series = useMemo(() => {
@@ -577,18 +627,23 @@ export default function Dashboard({ user, onLogout }) {
   const comments = commentSubmissions(current);
   const incidents = current.filter(isIncident);
 
-  const rows = useMemo(() => mine.map(branch => {
-    const cur = current.filter(s => s.branchId === branch.id);
-    const prev = previous.filter(s => s.branchId === branch.id);
-    return { branch, now: statsFor(cur), was: statsFor(prev), surveys: cur };
-  }), [mine, current, previous]);
+  const rows = useMemo(() => {
+    const list = locQuery === 'all' ? mine : mine.filter(b => b.id === locQuery);
+    return list.map(branch => {
+      const cur = current.filter(s => s.branchId === branch.id);
+      const prev = previous.filter(s => s.branchId === branch.id);
+      return { branch, now: statsFor(cur), was: statsFor(prev), surveys: cur };
+    });
+  }, [mine, current, previous, locQuery]);
+
+  const target = Number(user.smileTarget) > 0 ? Number(user.smileTarget) : 95;
 
   const smileDelta = was.total === 0 ? { dir: 'flat', text: '0.0' } : delta(now.smile, was.smile, 'points');
   const subDelta = delta(now.total, was.total, 'pct');
   const incDelta = delta(now.incidents, was.incidents, 'pct');
   const resDelta = delta(now.resolvedPct, was.resolvedPct, 'points');
 
-  const aheadSmile = (now.total ? now.smile : 0) >= INDUSTRY.smile;
+  const aheadSmile = (now.total ? now.smile : 0) >= target;
   const aheadRating = now.avgRating >= INDUSTRY.avgRating;
   const aheadInc = now.incidentPct / 100 <= INDUSTRY.incidentRate;
   const aheadReview = now.reviewPct / 100 >= INDUSTRY.reviewRate;
@@ -618,20 +673,17 @@ export default function Dashboard({ user, onLogout }) {
         <Kpi label="Resolved" icon="check" value={now.incidents ? `${now.resolvedPct.toFixed(2)}%` : '—'} deltaValue={resDelta} accent="res" />
       </div>
 
-      <div className="voc-grid-3">
+      <div className="voc-grid-2">
         <section className="voc-card">
           <div className="voc-card-head">
             <h2>Smile Score</h2>
+            <TargetControl value={target} onChange={n => setSmileTarget(user.id, n)} />
           </div>
-          <SmileGauge score={now.total ? now.smile : 0} />
+          <SmileGauge score={now.total ? now.smile : 0} target={target} />
         </section>
         <section className="voc-card">
           <div className="voc-card-head"><h2>Rating Breakdown</h2></div>
           <RatingBreakdown stats={now} />
-        </section>
-        <section className="voc-card voc-locked">
-          <div className="voc-card-head"><h2>3rd Party Reviews</h2></div>
-          <p className="voc-muted">You don't have permission to view review analytics.</p>
         </section>
       </div>
 
@@ -648,7 +700,7 @@ export default function Dashboard({ user, onLogout }) {
         <section className="voc-card">
           <div className="voc-card-head"><h2>Industry Benchmarks</h2></div>
           <div className="voc-benches">
-            <Benchmark label="Smile Score" value={now.total ? Math.round(now.smile) : '—'} vs={INDUSTRY.smile} better={aheadSmile} />
+            <Benchmark label="Smile Score" value={now.total ? Math.round(now.smile) : '—'} vs={target} better={aheadSmile} />
             <Benchmark label="Avg Submission Rating" value={now.total ? now.avgRating.toFixed(1) : '—'} vs={INDUSTRY.avgRating} better={aheadRating} />
             <Benchmark label="Incident Rate" value={now.total ? fmtPct(now.incidentPct) : '—'} vs={fmtPct(INDUSTRY.incidentRate * 100)} better={aheadInc} />
             <Benchmark label="Incident Review Rate" value={`${Math.round(now.reviewPct)}%`} vs={`${Math.round(INDUSTRY.reviewRate * 100)}%`} better={aheadReview} />
@@ -664,7 +716,7 @@ export default function Dashboard({ user, onLogout }) {
         setMinSubs={setMinSubs}
         mode={mode}
         setMode={setMode}
-        query={locQuery}
+        target={target}
         onSelect={row => setSelected(row)}
         selectedId={selected?.branch?.id}
       />
@@ -724,41 +776,10 @@ export default function Dashboard({ user, onLogout }) {
           <div className="voc-card-head"><h2>Incidents</h2></div>
           {!incidents.length && <p className="voc-muted">No incidents in this date range.</p>}
           <div className="voc-inc-list">
-            {incidents.map(s => {
-              const d = commentDetails(s);
-              return (
-                <article key={s.id} className="voc-inc">
-                  <div>
-                    <b>{s.branchName}</b>
-                    <span>{s.experience} · {new Date(s.at).toLocaleString()}</span>
-                  </div>
-                  <p>{d.comment || d.food || 'No comment left'}</p>
-                  <em>{d.phone ? `Resolved contact ${d.phone}` : 'Unresolved'}</em>
-                </article>
-              );
-            })}
+            {incidents.map(s => <IncidentCard key={s.id} s={s} />)}
           </div>
         </section>
       </>
-    );
-  } else if (page === 'social') {
-    body = <div className="voc-card voc-locked"><h2>Social Listening</h2><p className="voc-muted">You don't have permission to view review analytics.</p></div>;
-  } else if (page === 'surveys') {
-    body = (
-      <div className="voc-card">
-        <h2>Surveys</h2>
-        <p className="voc-muted">Guest Matrix is the live guest survey for your assigned locations.</p>
-        <p><b>{fmtNum(now.total)}</b> submissions in the selected period · average rating {now.total ? now.avgRating.toFixed(1) : '—'} / 5</p>
-      </div>
-    );
-  } else if (page === 'staff') {
-    body = (
-      <div className="voc-card">
-        <h2>Staff</h2>
-        <p className="voc-muted">Signed in as {user.username}</p>
-        <p>Assigned locations: {mine.map(b => b.name).join(', ') || 'None'}</p>
-        <button type="button" className="voc-export" onClick={onLogout}>Log out</button>
-      </div>
     );
   } else {
     body = vocMain;
@@ -773,20 +794,15 @@ export default function Dashboard({ user, onLogout }) {
             <Icon name="close" />
           </button>
         </div>
-        {NAV.map(group => (
-          <div key={group.group || 'main'} className="voc-nav-group">
-            {group.group && <p>{group.group}</p>}
-            {group.items.map(item => (
-              <button
-                type="button"
-                key={item.id}
-                className={page === item.id ? 'on' : ''}
-                onClick={() => { setPage(item.id); setMenu(false); }}
-              >
-                <Icon name={item.icon} /> {item.label}
-              </button>
-            ))}
-          </div>
+        {NAV.map(item => (
+          <button
+            type="button"
+            key={item.id}
+            className={page === item.id ? 'on' : ''}
+            onClick={() => { setPage(item.id); setMenu(false); }}
+          >
+            <Icon name={item.icon} /> {item.label}
+          </button>
         ))}
         <button type="button" className="voc-logout" onClick={onLogout}>Log out</button>
       </aside>
@@ -816,17 +832,14 @@ export default function Dashboard({ user, onLogout }) {
           )}
           <label className="voc-search">
             <Icon name="pin" />
-            <input value={locQuery} onChange={e => setLocQuery(e.target.value)} placeholder="Search Locations..." />
-          </label>
-          <label className="voc-search">
-            <Icon name="search" />
-            <input value={surveyQuery} onChange={e => setSurveyQuery(e.target.value)} placeholder="Search Surveys..." />
+            <select value={locQuery} onChange={e => setLocQuery(e.target.value)} aria-label="Branches">
+              <option value="all">All branches</option>
+              {mine.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
           </label>
         </header>
         {dbError && <p className="voc-error">{dbError}</p>}
-        {surveyQuery.trim() && !'guest matrix'.includes(surveyQuery.trim().toLowerCase())
-          ? <div className="voc-card"><p className="voc-muted">No surveys match “{surveyQuery}”.</p></div>
-          : body}
+        {body}
       </div>
     </div>
   );
