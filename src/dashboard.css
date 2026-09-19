@@ -1,6 +1,7 @@
 body:has(.voc) {
   background: #f4f6f9;
   color: #111827;
+  overflow-x: hidden;
 }
 
 .voc {
@@ -10,6 +11,8 @@ body:has(.voc) {
   background: #f4f6f9;
   color: #111827;
   font-family: Inter, system-ui, sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .voc-side {
@@ -156,6 +159,8 @@ body:has(.voc) {
   border: 1px solid #e8ecf2;
   border-radius: 16px;
   padding: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 .voc-card-head {
   display: flex;
@@ -163,6 +168,7 @@ body:has(.voc) {
   align-items: flex-start;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 .voc-card h2, .voc h2 { font-size: 16px; margin: 0; color: #0f172a; font-weight: 800; }
 .voc-card-head p, .voc-muted { color: #94a3b8; font-size: 13px; margin-top: 4px; line-height: 1.45; }
@@ -197,7 +203,8 @@ body:has(.voc) {
   border-radius: 999px;
   padding: 4px 8px 4px 10px;
   font-weight: 700;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 .voc-target-edit select, .voc-target-edit input {
   border: 1px solid #bbf7d0;
@@ -446,6 +453,7 @@ body:has(.voc) {
   }
   .voc-main {
     padding: max(12px, env(safe-area-inset-top)) 12px max(24px, env(safe-area-inset-bottom));
+    min-width: 0;
   }
   .voc-top { gap: 8px; }
   .voc-date {
@@ -457,28 +465,39 @@ body:has(.voc) {
   .voc-date select { max-width: 42%; min-width: 96px; }
   .voc-search, .voc-custom { flex: 1 1 100%; min-width: 0; }
   .voc-kpis, .voc-kpis-mini { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .voc-kpi { padding: 12px; }
-  .voc-kpi-value { font-size: 26px; }
+  .voc-kpi { padding: 12px; min-width: 0; }
+  .voc-kpi-value { font-size: clamp(18px, 6vw, 26px); overflow-wrap: anywhere; }
   .voc-kpi-sub { flex-wrap: wrap; }
+  .voc-kpi-top { font-size: 12px; }
   .voc-grid-3, .voc-grid-2 { grid-template-columns: 1fr; }
   .voc-benches { grid-template-columns: 1fr 1fr; }
-  .voc-chart-plot { grid-template-columns: 28px minmax(0, 1fr) 0; height: 180px; }
+  .voc-bench-val b { font-size: 22px; }
+  .voc-chart { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .voc-chart-plot { grid-template-columns: 28px minmax(0, 1fr) 0; height: 180px; min-width: 260px; }
   .voc-y-r { display: none; }
   .voc-x { padding: 8px 0 0 28px; font-size: 10px; }
-  .voc-legend { gap: 8px; font-size: 11px; }
-  .voc-tabs { overflow-x: auto; flex-wrap: nowrap; gap: 12px; -webkit-overflow-scrolling: touch; }
-  .voc-tabs button { flex: 0 0 auto; }
+  .voc-legend { gap: 8px; font-size: 11px; justify-content: flex-start; }
+  .voc-rate-row { grid-template-columns: 12px 16px minmax(24px, 1fr) 44px 36px; gap: 6px; font-size: 11px; }
+  .voc-gauge { min-height: 180px; }
+  .voc-gauge svg { width: min(190px, 70vw); height: auto; }
+  .voc-target { right: 0; top: 0; }
   .voc-export-box { width: 100%; }
-  .voc-export { min-height: 44px; justify-content: center; }
+  .voc-export { min-height: 44px; justify-content: center; width: 100%; }
   .voc-table-wrap { display: none; }
   .voc-loc-cards { display: grid; gap: 8px; }
+  .voc-loc-card-top { flex-wrap: wrap; }
   .voc-table-foot { flex-wrap: wrap; }
   .voc-pager button { min-height: 44px; }
   .voc-comment-top { flex-direction: column; align-items: flex-start; }
+  .voc-comment p { overflow-wrap: anywhere; }
   .voc-inc div { flex-direction: column; align-items: flex-start; }
+  .voc-inc-actions { width: 100%; }
+  .voc-sat, .voc-unsat { flex: 1; justify-content: center; }
   .voc-side button { min-height: 44px; }
 }
 @media (max-width: 420px) {
+  .voc-benches { grid-template-columns: 1fr; }
   .voc-kpi-value { font-size: 22px; }
   .voc-date select { font-size: 12px; }
+  .voc-sat, .voc-unsat { width: 100%; }
 }

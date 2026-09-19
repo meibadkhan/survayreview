@@ -17,7 +17,6 @@ import {
 
 const NAV = [
   { id: 'overview', label: 'Overview', icon: 'home' },
-  { id: 'voc', label: 'Voice of Customer', icon: 'mic' },
   { id: 'customers', label: 'Customers', icon: 'people' },
   { id: 'incidents', label: 'Incidents', icon: 'flag' },
   { id: 'analytics', label: 'Incident Analytics', icon: 'chart' },
@@ -590,7 +589,7 @@ export default function Dashboard({ user, onLogout }) {
   const { error: dbError } = useData();
   const mine = branchesForUser(user);
   const mySurveys = surveysForUser(user);
-  const [page, setPage] = useState('voc');
+  const [page, setPage] = useState('overview');
   const [preset, setPreset] = useState('30d');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
