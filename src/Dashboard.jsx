@@ -381,21 +381,19 @@ function locationRow(r) {
   return { smile, face: smile >= 95 ? 'excellent' : smile >= 90 ? 'good' : 'average' };
 }
 
-function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, target, onSelect, selectedId }) {
-  const filtered = rows.filter(r => r.now.total >= minSubs);
-  const shown = mode === 'under'
-    ? filtered.filter(r => (r.now.total ? r.now.smile : 100) < target)
-    : filtered;
+function LocationsTable({ rows, onSelect, selectedId }) {
   const [page, setPage] = useState(0);
-  const searched = shown;
+  const [exportId, setExportId] = useState('all');
+  const searched = rows;
   const size = 8;
   const pages = Math.max(1, Math.ceil(searched.length / size));
   const cur = Math.min(page, pages - 1);
   const slice = searched.slice(cur * size, cur * size + size);
 
   function exportCsv() {
+    const list = exportId === 'all' ? searched : searched.filter(r => r.branch.id === exportId);
     const header = ['Location', 'Smile Score', 'Submissions', '% Positive Feedback', 'Incidents', '% Incidents', 'Unresolved Incidents'];
-    const lines = [header.join(',')].concat(searched.map(r => [
+    const lines = [header.join(',')].concat(list.map(r => [
       `"${r.branch.name}"`,
       r.now.total ? Math.round(r.now.smile) : '',
       r.now.total,
@@ -407,24 +405,23 @@ function LocationsTable({ rows, minSubs, setMinSubs, mode, setMode, target, onSe
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'locations.csv';
+    const name = exportId === 'all' ? 'all-branches' : (list[0]?.branch.name || 'location');
+    a.download = `${String(name).replace(/[^\w.-]+/g, '-')}.csv`;
     a.click();
   }
 
   return (
     <section className="voc-card voc-table-card">
       <div className="voc-table-tools">
-        <label className="voc-min">
-          <input type="checkbox" checked={minSubs > 0} onChange={e => setMinSubs(e.target.checked ? Math.max(minSubs, 1) : 0)} />
-          Show locations with more than
-          <input type="number" min="0" value={minSubs} onChange={e => setMinSubs(Math.max(0, Number(e.target.value) || 0))} />
-          submissions
-        </label>
-        <div className="voc-table-right">
-          <select value={mode} onChange={e => { setMode(e.target.value); setPage(0); }}>
-            <option value="under">Underperforming</option>
-            <option value="all">All locations</option>
-          </select>
+        <div className="voc-export-box">
+          <label className="voc-search voc-export-select">
+            <select value={exportId} onChange={e => setExportId(e.target.value)} aria-label="Export branches">
+              <option value="all">All branches</option>
+              {searched.map(r => (
+                <option key={r.branch.id} value={r.branch.id}>{r.branch.name}</option>
+              ))}
+            </select>
+          </label>
           <button type="button" className="voc-export" onClick={exportCsv}><Icon name="download" /> Export</button>
         </div>
       </div>
@@ -598,8 +595,6 @@ export default function Dashboard({ user, onLogout }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [locQuery, setLocQuery] = useState('all');
-  const [minSubs, setMinSubs] = useState(0);
-  const [mode, setMode] = useState('all');
   const [selected, setSelected] = useState(null);
   const [menu, setMenu] = useState(false);
   const range = periodRange(preset === 'custom' ? 'custom' : preset, new Date(), { from, to });
@@ -712,11 +707,6 @@ export default function Dashboard({ user, onLogout }) {
 
       <LocationsTable
         rows={rows}
-        minSubs={minSubs}
-        setMinSubs={setMinSubs}
-        mode={mode}
-        setMode={setMode}
-        target={target}
         onSelect={row => setSelected(row)}
         selectedId={selected?.branch?.id}
       />

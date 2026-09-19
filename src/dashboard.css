@@ -325,8 +325,10 @@ body:has(.voc) {
 .voc-tabs button.on { color: #4f46e5; border-bottom: 2px solid #4f46e5; }
 .voc-tabs button:disabled { cursor: default; opacity: .65; }
 .voc-table-tools {
-  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;
+  display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px;
 }
+.voc-export-box { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: min(240px, 100%); }
+.voc-export-select { min-width: 0; width: 100%; }
 .voc-min { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; }
 .voc-min input[type="number"] {
   width: 72px; min-height: 32px; padding: 4px 8px; border: 1px solid #e5e9f0; border-radius: 8px; font-size: 13px;
@@ -466,9 +468,8 @@ body:has(.voc) {
   .voc-legend { gap: 8px; font-size: 11px; }
   .voc-tabs { overflow-x: auto; flex-wrap: nowrap; gap: 12px; -webkit-overflow-scrolling: touch; }
   .voc-tabs button { flex: 0 0 auto; }
-  .voc-min { flex-wrap: wrap; }
-  .voc-table-right { width: 100%; }
-  .voc-table-right select, .voc-export { flex: 1 1 auto; min-height: 44px; }
+  .voc-export-box { width: 100%; }
+  .voc-export { min-height: 44px; justify-content: center; }
   .voc-table-wrap { display: none; }
   .voc-loc-cards { display: grid; gap: 8px; }
   .voc-table-foot { flex-wrap: wrap; }
