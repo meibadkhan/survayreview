@@ -71,6 +71,13 @@ body:has(.voc) {
   min-width: 0;
   padding: 16px 20px 32px;
 }
+.voc-hello {
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px;
+  line-height: 1.25;
+}
 
 .voc-top {
   display: flex;

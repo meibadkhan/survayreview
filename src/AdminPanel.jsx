@@ -7,6 +7,7 @@ import {
   createUser,
   deleteBranch,
   deleteUser,
+  greeting,
   ownerOfBranch,
   resetPassword,
   surveyLink,
@@ -174,7 +175,8 @@ export default function AdminPanel({ user, onLogout }) {
         <header className="portal-top">
           <div>
             <p className="dash-kicker">Super admin</p>
-            <h1>Create branches and users</h1>
+            <h1>{greeting(user.username)}</h1>
+            <p className="muted">Create branches and users</p>
           </div>
           <button className="ghost-btn" onClick={onLogout}>Log out</button>
         </header>

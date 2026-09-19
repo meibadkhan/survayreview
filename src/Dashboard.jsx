@@ -12,6 +12,7 @@ import {
   setSmileTarget,
   statsFor,
   surveysForUser,
+  greeting,
   useData,
 } from './store';
 
@@ -797,6 +798,7 @@ export default function Dashboard({ user, onLogout }) {
       </aside>
       {menu && <button type="button" className="voc-scrim" onClick={() => setMenu(false)} aria-label="Close menu" />}
       <div className="voc-main">
+        <p className="voc-hello">{greeting(user.username)}</p>
         <header className="voc-top">
           <button type="button" className="voc-menu" onClick={() => setMenu(true)} aria-label="Open menu">
             <Icon name="menu" />

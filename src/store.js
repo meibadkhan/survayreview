@@ -476,8 +476,14 @@ export function setSmileTarget(userId, smileTarget) {
 }
 
 export function greeting(username) {
-  const h = new Date().getHours();
-  const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Karachi',
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).format(new Date()),
+  );
+  const part = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   return `${part}, ${username}`;
 }
 
